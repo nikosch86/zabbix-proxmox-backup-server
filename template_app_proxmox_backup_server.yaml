@@ -1,0 +1,559 @@
+zabbix_export:
+  version: '6.4'
+  template_groups:
+    - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+      name: Templates/Applications
+  templates:
+    - uuid: 8e155e663e5c4a3f93a765d6c30b70cd
+      template: 'Proxmox Backup Server by HTTP'
+      name: 'Proxmox Backup Server by HTTP'
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 0449b6e2a6ae4e40860479b234035718
+          name: 'PBS: API service status'
+          type: SCRIPT
+          key: pbs.api.available
+          delay: 5m
+          history: 7d
+          params: |
+            try {
+              var params = JSON.parse(value);
+              var req = new HttpRequest();
+              req.addHeader('Authorization: PBSAPIToken=' + params.token + ':' + params.secret);
+              req.get(encodeURI('https://' + params.url + ':' + params.port + '/api2/json/version'));  
+            } catch (error) {
+                Zabbix.log(3, "Proxmox Backup Server API failed: " + params.url + " Error: " + error);
+                if (!Number.isInteger(error))
+                    return 520;
+            }
+            return req.getStatus();
+          description: 'Get API service status.'
+          valuemap:
+            name: 'HTTP response status code'
+          preprocessing:
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 12h
+          timeout: 10s
+          parameters:
+            - name: port
+              value: '{$PBS.URL.PORT}'
+            - name: secret
+              value: '{$PBS.TOKEN.SECRET}'
+            - name: token
+              value: '{$PBS.TOKEN.ID}'
+            - name: url
+              value: '{HOST.CONN}'
+          tags:
+            - tag: component
+              value: system
+          triggers:
+            - uuid: c824c9e2069b4566b4c0d41d5ae7266e
+              expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
+              name: 'PBS: API service not available'
+              priority: HIGH
+        - uuid: ddea6e9d77c04fedb237d1bf72d22778
+          name: 'PBS: Get datastore status'
+          type: HTTP_AGENT
+          key: pbs.datastore.status
+          trends: '0'
+          value_type: TEXT
+          description: 'Get datastore status.'
+          preprocessing:
+            - type: CHECK_NOT_SUPPORTED
+              parameters:
+                - ''
+              error_handler: CUSTOM_VALUE
+              error_handler_params: 'Error getting data'
+            - type: JSONPATH
+              parameters:
+                - $.body.data
+          timeout: 10s
+          url: 'https://{HOST.CONN}:{$PBS.URL.PORT}/api2/json/status/datastore-usage'
+          headers:
+            - name: Authorization
+              value: 'PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}'
+          output_format: JSON
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 83c76592aedf4833a63393b5e7b54fb9
+          name: 'PBS: Get disks'
+          type: HTTP_AGENT
+          key: pbs.disks
+          delay: 5m
+          trends: '0'
+          value_type: TEXT
+          description: 'Get disks.'
+          preprocessing:
+            - type: CHECK_NOT_SUPPORTED
+              parameters:
+                - ''
+              error_handler: CUSTOM_VALUE
+              error_handler_params: 'Error getting data'
+            - type: JSONPATH
+              parameters:
+                - $.body.data
+          timeout: 10s
+          url: 'https://{HOST.CONN}:{$PBS.URL.PORT}/api2/json/nodes/localhost/disks/list'
+          headers:
+            - name: Authorization
+              value: 'PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}'
+          output_format: JSON
+          tags:
+            - tag: component
+              value: raw
+      discovery_rules:
+        - uuid: 5eec729d0e1c4e529cdc884a6c5887db
+          name: 'PBS: Datastore discovery'
+          type: DEPENDENT
+          key: pbs.datastore.discovery
+          delay: '0'
+          item_prototypes:
+            - uuid: 60f2c0498c414dfdab7e80cc7ea2985b
+              name: 'PBS: Datastore [{#DATASTORE.NAME}] Available Size'
+              type: DEPENDENT
+              key: 'pbs.datastore.available[{#DATASTORE.NAME}]'
+              delay: '0'
+              units: bytes
+              description: 'Available size of datastore in bytes.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.store == ''{#DATASTORE.NAME}'')].avail.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.datastore.status
+              tags:
+                - tag: component
+                  value: system
+                - tag: datastore
+                  value: '{#DATASTORE.NAME}'
+              trigger_prototypes:
+                - uuid: 79b3b6148288487f86d596ffdce93434
+                  expression: |
+                    min(/Proxmox Backup Server by HTTP/pbs.datastore.available[{#DATASTORE.NAME}],15m)<
+                    {$PBS.DATASTORE.AVAILABLE.MIN:"{#DATASTORE.NAME}"}
+                  name: 'PBS: Datastore [{#DATASTORE.NAME}] Available Size'
+                  priority: HIGH
+                  description: 'Datastore [{#DATASTORE.NAME}] has less than {$PBS.DATASTORE.AVAILABLE.MIN:"{#DATASTORE.NAME}"} bytes available.'
+            - uuid: 75d30b86c1234fb08f90b5f6cbe958af
+              name: 'PBS: Datastore [{#DATASTORE.NAME}] Error'
+              type: DEPENDENT
+              key: 'pbs.datastore.error[{#DATASTORE.NAME}]'
+              delay: '0'
+              trends: '0'
+              value_type: TEXT
+              description: 'Error status of datastore.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.store == ''{#DATASTORE.NAME}'')].error.first()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: 'No Error'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.datastore.status
+              tags:
+                - tag: component
+                  value: system
+                - tag: datastore
+                  value: '{#DATASTORE.NAME}'
+              trigger_prototypes:
+                - uuid: b9adc2dcab1f417ea18bcbfceadfb725
+                  expression: 'find(/Proxmox Backup Server by HTTP/pbs.datastore.error[{#DATASTORE.NAME}],,"like","No Error")=0'
+                  name: 'PBS: Datastore [{#DATASTORE.NAME}] Error'
+                  priority: HIGH
+                  description: 'Datastore [{#DATASTORE.NAME}] is reporting an error!'
+            - uuid: a75f614f0bfa43b6b2c6d70456098dad
+              name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Full Date'
+              type: DEPENDENT
+              key: 'pbs.datastore.estimatedfulldate[{#DATASTORE.NAME}]'
+              delay: '0'
+              trends: '0'
+              value_type: TEXT
+              description: |
+                Estimation of the Date Time Stamp when the storage will be full.
+                It's calculated via a simple Linear Regression (Least Squares) over the RRD data of the
+                last Month. Missing if not enough data points are available yet. An estimate in the past
+                means that usage is declining or not changing.
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.store == ''{#DATASTORE.NAME}'')].[''estimated-full-date''].first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var current_unixtime = Math.floor(Date.now() / 1000);
+                      var delta = value - current_unixtime;
+                      if (delta < 0) return "Never";
+                      return new Date(value * 1000);
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.datastore.status
+              tags:
+                - tag: component
+                  value: system
+                - tag: datastore
+                  value: '{#DATASTORE.NAME}'
+            - uuid: 1bb5ff8c93604d188b85e91006e3987f
+              name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Seconds to Full'
+              type: DEPENDENT
+              key: 'pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}]'
+              delay: '0'
+              description: |
+                Estimation of the UNIX epoch when the storage will be full.
+                It's calculated via a simple Linear Regression (Least Squares) over the RRD data of the
+                last Month. Missing if not enough data points are available yet. An estimate in the past
+                means that usage is declining or not changing.
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.store == ''{#DATASTORE.NAME}'')].[''estimated-full-date''].first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var current_unixtime = Math.floor(Date.now() / 1000);
+                      var delta = Math.max(0, (value - current_unixtime));
+                      return delta;
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.datastore.status
+              tags:
+                - tag: component
+                  value: system
+                - tag: datastore
+                  value: '{#DATASTORE.NAME}'
+              trigger_prototypes:
+                - uuid: 48c8a3296a0d49e5b000646527a9906d
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}])<2419200 and last(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}])>0'
+                  name: 'PBS: Datastore [{#DATASTORE.NAME}] filling up within one month'
+                  priority: HIGH
+                  description: 'Datastore [{#DATASTORE.NAME}] is filling up.'
+                - uuid: f8899123a86144a0a306a77143c681cb
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}])<604800 and last(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}])>0'
+                  name: 'PBS: Datastore [{#DATASTORE.NAME}] filling up within one week'
+                  priority: HIGH
+                  description: 'Datastore [{#DATASTORE.NAME}] is filling up.'
+            - uuid: 980e2da86ba74e5c9ca85b1ac308352d
+              name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Time to Full'
+              type: DEPENDENT
+              key: 'pbs.datastore.estimatedtimetofull[{#DATASTORE.NAME}]'
+              delay: '0'
+              trends: '0'
+              value_type: TEXT
+              description: |
+                Estimation of the Time until the storage will be full.
+                It's calculated via a simple Linear Regression (Least Squares) over the RRD data of the
+                last Month. Missing if not enough data points are available yet. An estimate in the past
+                means that usage is declining or not changing.
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.store == ''{#DATASTORE.NAME}'')].[''estimated-full-date''].first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var current_unixtime = Math.floor(Date.now() / 1000);
+                      var delta = value - current_unixtime;
+                      if (delta < 0) return "Never";
+                      
+                      var days = Math.floor(delta / 86400);
+                      delta -= days * 86400;
+                      
+                      var hours = Math.floor(delta / 3600) % 24;
+                      delta -= hours * 3600;
+                      
+                      var minutes = Math.floor(delta / 60) % 60;
+                      delta -= minutes * 60;
+                      
+                      var seconds = Math.floor(delta % 60);
+                      
+                      return days+" Days "+hours+":"+minutes+":"+seconds+" (Hours:Minutes:Seconds)";
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.datastore.status
+              tags:
+                - tag: component
+                  value: system
+                - tag: datastore
+                  value: '{#DATASTORE.NAME}'
+            - uuid: ba568908143c4e87873dd1dd1b733283
+              name: 'PBS: Datastore [{#DATASTORE.NAME}] Total Size'
+              type: DEPENDENT
+              key: 'pbs.datastore.total[{#DATASTORE.NAME}]'
+              delay: '0'
+              units: bytes
+              description: 'Total size of datastore in bytes.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.store == ''{#DATASTORE.NAME}'')].total.first()'
+              master_item:
+                key: pbs.datastore.status
+              tags:
+                - tag: component
+                  value: system
+                - tag: datastore
+                  value: '{#DATASTORE.NAME}'
+            - uuid: 5839a1a69f48430cb580bb111486663f
+              name: 'PBS: Datastore [{#DATASTORE.NAME}] Used Size'
+              type: DEPENDENT
+              key: 'pbs.datastore.used[{#DATASTORE.NAME}]'
+              delay: '0'
+              units: bytes
+              description: 'Used size of datastore in bytes.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.store == ''{#DATASTORE.NAME}'')].used.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.datastore.status
+              tags:
+                - tag: component
+                  value: system
+                - tag: datastore
+                  value: '{#DATASTORE.NAME}'
+          master_item:
+            key: pbs.datastore.status
+          lld_macro_paths:
+            - lld_macro: '{#DATASTORE.NAME}'
+              path: $.store
+        - uuid: 4333aa3a0ee64fe8aede5e835d63923d
+          name: 'PBS: Disk discovery'
+          type: DEPENDENT
+          key: pbs.disk.discovery
+          delay: '0'
+          item_prototypes:
+            - uuid: 85501120e36d48589a52d56d0dec55d7
+              name: 'PBS: Disk [{#DISK.PATH}] Model'
+              type: DEPENDENT
+              key: 'pbs.disk.model[{#DISK.PATH}]'
+              delay: '0'
+              trends: '0'
+              value_type: TEXT
+              description: 'Model of the disk.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.devpath == ''{#DISK.PATH}'')].model.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.disks
+              trigger_prototypes:
+                - uuid: bcd531f0197143c38860a24e1ef2ee5b
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.disk.model[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by HTTP/pbs.disk.model[{#DISK.PATH}],#2)'
+                  name: 'PBS: Disk [{#DISK.PATH}] Model has changed'
+                  priority: WARNING
+                  manual_close: 'YES'
+            - uuid: ff389bb665884d11b41b77c5b932bbd0
+              name: 'PBS: Disk [{#DISK.PATH}] Name'
+              type: DEPENDENT
+              key: 'pbs.disk.name[{#DISK.PATH}]'
+              delay: '0'
+              trends: '0'
+              value_type: TEXT
+              description: 'Name of the disk.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.devpath == ''{#DISK.PATH}'')].name.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.disks
+            - uuid: 485d2a3a98e944008618a91cd43c30f3
+              name: 'PBS: Disk [{#DISK.PATH}] Serial'
+              type: DEPENDENT
+              key: 'pbs.disk.serial[{#DISK.PATH}]'
+              delay: '0'
+              trends: '0'
+              value_type: TEXT
+              description: 'Serial of the disk.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.devpath == ''{#DISK.PATH}'')].serial.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.disks
+              trigger_prototypes:
+                - uuid: f07a872469d94d0dae3b955656593f66
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.disk.serial[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by HTTP/pbs.disk.serial[{#DISK.PATH}],#2)'
+                  name: 'PBS: Disk [{#DISK.PATH}] Serial has changed'
+                  priority: WARNING
+                  manual_close: 'YES'
+            - uuid: 7c31eaeb57f14ab9b457fa6e968b9ca4
+              name: 'PBS: Disk [{#DISK.PATH}] Size'
+              type: DEPENDENT
+              key: 'pbs.disk.size[{#DISK.PATH}]'
+              delay: '0'
+              units: bytes
+              description: 'Total Size of disk in bytes.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.devpath == ''{#DISK.PATH}'')].size.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.disks
+            - uuid: 3d5ddd6ae9c84ded8f82da383a986d25
+              name: 'PBS: Disk [{#DISK.PATH}] Status'
+              type: DEPENDENT
+              key: 'pbs.disk.status[{#DISK.PATH}]'
+              delay: '0'
+              trends: '0'
+              value_type: TEXT
+              description: 'Disk status.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.devpath == ''{#DISK.PATH}'')].status.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.disks
+              trigger_prototypes:
+                - uuid: 0ebb109edcbc40d095945ca9a530dc5f
+                  expression: 'find(/Proxmox Backup Server by HTTP/pbs.disk.status[{#DISK.PATH}],,"like","unknown")=0'
+                  name: 'PBS: Disk [{#DISK.PATH}] Status indicates a problem'
+                  priority: WARNING
+                  manual_close: 'YES'
+            - uuid: 4e4148965fd9483bbc1ba7c145368bba
+              name: 'PBS: Disk [{#DISK.PATH}] Used'
+              type: DEPENDENT
+              key: 'pbs.disk.used[{#DISK.PATH}]'
+              delay: '0'
+              trends: '0'
+              value_type: TEXT
+              description: 'Indicates where (and if) that disk is used by PBS.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.devpath == ''{#DISK.PATH}'')].used.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.disks
+              trigger_prototypes:
+                - uuid: 64b7d1789dd44d9eabaf3b072548a4db
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.disk.used[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by HTTP/pbs.disk.used[{#DISK.PATH}],#2)'
+                  name: 'PBS: Disk [{#DISK.PATH}] Used has changed'
+                  priority: WARNING
+                  manual_close: 'YES'
+            - uuid: 3a781863820548b78994156dff6b5175
+              name: 'PBS: Disk [{#DISK.PATH}] Vendor'
+              type: DEPENDENT
+              key: 'pbs.disk.vendor[{#DISK.PATH}]'
+              delay: '0'
+              trends: '0'
+              value_type: TEXT
+              description: 'Vendor of the disk.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.devpath == ''{#DISK.PATH}'')].vendor.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.disks
+            - uuid: 791a4b27bf53470cad24018548b2439d
+              name: 'PBS: Disk [{#DISK.PATH}] Wearout'
+              type: DEPENDENT
+              key: 'pbs.disk.wearout[{#DISK.PATH}]'
+              delay: '0'
+              trends: '0'
+              value_type: TEXT
+              description: 'Wearout indicator.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.devpath == ''{#DISK.PATH}'')].wearout.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pbs.disks
+          master_item:
+            key: pbs.disks
+          lld_macro_paths:
+            - lld_macro: '{#DISK.NAME}'
+              path: $.name
+            - lld_macro: '{#DISK.PATH}'
+              path: $.devpath
+            - lld_macro: '{#DISK.SERIAL}'
+              path: $.serial
+            - lld_macro: '{#DISK.SIZE}'
+              path: $.size
+            - lld_macro: '{#DISK.STATUS}'
+              path: $.status
+            - lld_macro: '{#DISK.TYPE}'
+              path: '$.[''disk-type'']'
+            - lld_macro: '{#DISK.USED}'
+              path: $.used
+            - lld_macro: '{#DISK.VENDOR}'
+              path: $.vendor
+            - lld_macro: '{#DISK.WEAROUT}'
+              path: $.wearout
+      macros:
+        - macro: '{$PBS.DATASTORE.AVAILABLE.MIN}'
+          value: '10737418240'
+        - macro: '{$PBS.TOKEN.ID}'
+          value: USER@REALM!TOKENID
+          description: 'API tokens allow stateless access to most parts of the REST API by another system, software or API client.'
+        - macro: '{$PBS.TOKEN.SECRET}'
+          value: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        - macro: '{$PBS.URL.PORT}'
+          value: '8007'
+      valuemaps:
+        - uuid: b4e066bfeb334388a8fb9f30ad844459
+          name: 'HTTP response status code'
+          mappings:
+            - value: '200'
+              newvalue: OK
+            - value: '301'
+              newvalue: 'Moved Permanently'
+            - value: '400'
+              newvalue: 'Bad Request'
+            - value: '401'
+              newvalue: Unauthorized
+            - value: '403'
+              newvalue: Forbidden
+            - value: '404'
+              newvalue: 'Not Found'
+            - value: '405'
+              newvalue: 'Method Not Allowed'
+            - value: '500'
+              newvalue: 'Internal Server Error'
+            - value: '502'
+              newvalue: 'Bad Gateway'
+            - value: '503'
+              newvalue: 'Service Unavailable'
+            - value: '504'
+              newvalue: 'Gateway Timeout'
+            - value: '520'
+              newvalue: 'Unknown Error'
