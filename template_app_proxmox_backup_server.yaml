@@ -57,6 +57,7 @@ zabbix_export:
           name: 'PBS: Get datastore status'
           type: HTTP_AGENT
           key: pbs.datastore.status
+          delay: 5m
           trends: '0'
           value_type: TEXT
           description: 'Get datastore status.'
