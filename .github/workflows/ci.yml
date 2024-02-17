@@ -13,14 +13,8 @@ jobs:
       - name: Check out the codebase.
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.
-        uses: actions/setup-python@v5
+      - name: 'Yamllint'
+        uses: karancode/yamllint-github-action@master
         with:
-          python-version: '3.x'
-
-      - name: Install test dependencies.
-        run: pip3 install yamllint
-
-      - name: Lint code.
-        run: |
-          yamllint .
+          yamllint_strict: false
+          yamllint_comment: false
