@@ -3,7 +3,7 @@ extends: default
 
 rules:
   line-length:
-    max: 200
+    max: 250
     level: warning
   document-start: disable
   trailing-spaces: disable
