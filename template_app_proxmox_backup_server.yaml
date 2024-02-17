@@ -21,9 +21,9 @@ zabbix_export:
               var params = JSON.parse(value);
               var req = new HttpRequest();
               req.addHeader('Authorization: PBSAPIToken=' + params.token + ':' + params.secret);
-              req.get(encodeURI('https://' + params.url + ':' + params.port + '/api2/json/version'));  
+              req.get(encodeURI('https://' + params.host + ':' + params.port + '/api2/json/version'));  
             } catch (error) {
-                Zabbix.log(3, "Proxmox Backup Server API failed: " + params.url + " Error: " + error);
+                Zabbix.log(3, "Proxmox Backup Server API failed: " + params.host + " Error: " + error);
                 if (!Number.isInteger(error))
                     return 520;
             }
@@ -37,14 +37,14 @@ zabbix_export:
                 - 12h
           timeout: 10s
           parameters:
+            - name: host
+              value: '{$PBS.HOST}'
             - name: port
-              value: '{$PBS.URL.PORT}'
+              value: '{$PBS.PORT}'
             - name: secret
               value: '{$PBS.TOKEN.SECRET}'
             - name: token
               value: '{$PBS.TOKEN.ID}'
-            - name: url
-              value: '{HOST.CONN}'
           tags:
             - tag: component
               value: system
@@ -71,7 +71,7 @@ zabbix_export:
               parameters:
                 - $.body.data
           timeout: 10s
-          url: 'https://{HOST.CONN}:{$PBS.URL.PORT}/api2/json/status/datastore-usage'
+          url: 'https://{$PBS.HOST}:{$PBS.PORT}/api2/json/status/datastore-usage'
           headers:
             - name: Authorization
               value: 'PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}'
@@ -97,7 +97,7 @@ zabbix_export:
               parameters:
                 - $.body.data
           timeout: 10s
-          url: 'https://{HOST.CONN}:{$PBS.URL.PORT}/api2/json/nodes/localhost/disks/list'
+          url: 'https://{$PBS.HOST}:{$PBS.PORT}/api2/json/nodes/localhost/disks/list'
           headers:
             - name: Authorization
               value: 'PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}'
@@ -523,13 +523,15 @@ zabbix_export:
       macros:
         - macro: '{$PBS.DATASTORE.AVAILABLE.MIN}'
           value: '10737418240'
+        - macro: '{$PBS.HOST}'
+          value: '{HOST.CONN}'
+        - macro: '{$PBS.PORT}'
+          value: '8007'
         - macro: '{$PBS.TOKEN.ID}'
           value: USER@REALM!TOKENID
           description: 'API tokens allow stateless access to most parts of the REST API by another system, software or API client.'
         - macro: '{$PBS.TOKEN.SECRET}'
           value: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-        - macro: '{$PBS.URL.PORT}'
-          value: '8007'
       valuemaps:
         - uuid: b4e066bfeb334388a8fb9f30ad844459
           name: 'HTTP response status code'

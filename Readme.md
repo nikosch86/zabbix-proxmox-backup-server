@@ -32,7 +32,8 @@ Use the resulting Token ID and Secret in the host macros.
 
 | Name                           | Description                                                                                                       | Default                                |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| {$PBS.URL.PORT}                | <p>The API uses the HTTPS protocol and the server listens to port 8007 by default.</p>                            | `8007`                                 |
+| {$PBS.HOST}                | <p>The Hostname of the PBS server. Defaults to the HOST.CONN of the configured host.</p>                            | `{HOST.CONN}`                                 |
+| {$PBS.PORT}                | <p>The API uses the HTTPS protocol and the server listens to port 8007 by default.</p>                            | `8007`                                 |
 | {$PBS.TOKEN.ID}                | <p>API tokens allow stateless access to most parts of the REST API by another system, software or API client.</p> | `USER@REALM!TOKENID`                   |
 | {$PBS.TOKEN.SECRET}            | <p>Secret key.</p>                                                                                                | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
 | {$PBS.DATASTORE.AVAILABLE.MIN} | <p>Minimum available space in datastore in bytes (defaults to 10Gb).</p>                                          | `10737418240`                          |
