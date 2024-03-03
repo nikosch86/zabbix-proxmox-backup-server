@@ -37,6 +37,7 @@ Use the resulting Token ID and Secret in the host macros.
 | {$PBS.TOKEN.ID}                | <p>API tokens allow stateless access to most parts of the REST API by another system, software or API client.</p> | `USER@REALM!TOKENID`                   |
 | {$PBS.TOKEN.SECRET}            | <p>Secret key.</p>                                                                                                | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
 | {$PBS.DATASTORE.AVAILABLE.MIN} | <p>Minimum available space in datastore in bytes (defaults to 10Gb).</p>                                          | `10737418240`                          |
+| {$PBS.TASKS.DAYS} | <p>Age of tasks to consider when looking for failed tasks (days) (defaults to 2).</p>                                          | `2`                          |
 
 ### Items
 
@@ -45,12 +46,14 @@ Use the resulting Token ID and Secret in the host macros.
 | PBS: Get disks            | <p>Get all disks status.</p>             | HTTP agent | pbs.disks<p>**Preprocessing**</p><ul><li><p>Check for not supported value</p><p>⛔️Custom on fail: Set value to: `Error getting data`</p></li><li><p>JSONPath: `$.body.data`</p></li></ul>            |
 | PBS: Get datastore status | <p>Get datastore status information.</p> | HTTP agent | pbs.datastore.status<p>**Preprocessing**</p><ul><li><p>Check for not supported value</p><p>⛔️Custom on fail: Set value to: `Error getting data`</p></li><li><p>JSONPath: `$.body.data`</p></li></ul> |
 | PBS: API service status   | <p>Get API service status.</p>           | Script     | pbs.api.available<p>**Preprocessing**</p><ul><li><p>Discard unchanged with heartbeat: `12h`</p></li></ul>                                                                                             |
+| PBS: Get failed tasks     | <p>Get erroneuous tasks.</p>             | HTTP agent | pbs.tasks.error<p>**Preprocessing**</p><ul><li><p>Check for not supported value</p><p>⛔️Custom on fail: Set value to: `Error getting data`</p></li><li><p>JSONPath: `$.body.data`</p></li><li><p>JavaScript (filters tasks by age)</p></li></ul>                                                                                             |
 
 ### Triggers
 
 | Name                           | Description                                                                             | Expression                                                      | Severity | Dependencies and additional info |
 | ------------------------------ | --------------------------------------------------------------------------------------- | --------------------------------------------------------------- | -------- | -------------------------------- |
 | PBS: API service not available | <p>The API service is not available. Check your network and authorization settings.</p> | `last(/Proxmox Backup Server by HTTP/pbs.api.available) <> 200` | High     |                                  |
+| PBS: Failed tasks found        | <p>Erroneus tasks that occured within the last {$PBS.TASKS.DAYS} days have been found.</p> | `last(/Proxmox Backup Server by HTTP/pbs.tasks.error)<>"[]"` | High     |                                  |
 
 ### LLD rule Datastore discovery
 

@@ -105,6 +105,63 @@ zabbix_export:
           tags:
             - tag: component
               value: raw
+        - uuid: 17e7c9ee749946aaaf19ae4f1148f0d1
+          name: 'PBS: Get failed tasks'
+          type: HTTP_AGENT
+          key: pbs.tasks.error
+          delay: 5m
+          trends: '0'
+          value_type: TEXT
+          description: 'Get erroneuous tasks.'
+          preprocessing:
+            - type: CHECK_NOT_SUPPORTED
+              parameters:
+                - ''
+              error_handler: CUSTOM_VALUE
+              error_handler_params: 'Error getting data'
+            - type: JSONPATH
+              parameters:
+                - $.body.data
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var result = [];
+                  const daysAgo = {$PBS.TASKS.DAYS};
+                  const daysInSeconds = daysAgo * 86400;
+                  const currentTimestamp = Math.floor(Date.now() / 1000);
+                  const thresholdTimestamp = currentTimestamp - daysInSeconds;
+                  
+                  tasks = JSON.parse(value);
+                  if (tasks instanceof Array) {
+                      tasks.forEach(function (task) {
+                          if (task.starttime > thresholdTimestamp) {
+                              result.push(task);
+                          }
+                      });
+                  }
+                  
+                  return JSON.stringify(result);
+          timeout: 10s
+          url: 'https://{$PBS.HOST}:{$PBS.PORT}/api2/json/nodes/0/tasks'
+          query_fields:
+            - name: errors
+              value: 'true'
+          headers:
+            - name: Authorization
+              value: 'PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}'
+          output_format: JSON
+          tags:
+            - tag: component
+              value: raw
+          triggers:
+            - uuid: 4ed0f3d92ddd49ceb0910bfd2c974232
+              expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error)<>"[]"'
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error)="[]"'
+              name: 'PBS: Failed tasks found'
+              opdata: '{ITEM.VALUE}'
+              priority: HIGH
+              description: 'Erroneus tasks that occured within the last {$PBS.TASKS.DAYS} days have been found.'
       discovery_rules:
         - uuid: 5eec729d0e1c4e529cdc884a6c5887db
           name: 'PBS: Datastore discovery'
@@ -527,6 +584,9 @@ zabbix_export:
           value: '{HOST.CONN}'
         - macro: '{$PBS.PORT}'
           value: '8007'
+        - macro: '{$PBS.TASKS.DAYS}'
+          value: '2'
+          description: 'Age of tasks to consider when looking for failed tasks (days)'
         - macro: '{$PBS.TOKEN.ID}'
           value: USER@REALM!TOKENID
           description: 'API tokens allow stateless access to most parts of the REST API by another system, software or API client.'
