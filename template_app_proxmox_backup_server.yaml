@@ -581,7 +581,7 @@ zabbix_export:
         - macro: '{$PBS.DATASTORE.AVAILABLE.MIN}'
           value: '10737418240'
         - macro: '{$PBS.HOST}'
-          value: '{HOST.CONN}'
+          value: '<HOSTNAME>'
         - macro: '{$PBS.PORT}'
           value: '8007'
         - macro: '{$PBS.TASKS.DAYS}'
