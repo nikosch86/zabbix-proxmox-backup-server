@@ -152,8 +152,6 @@ zabbix_export:
               value: error
             - name: statusfilter
               value: warning
-            - name: statusfilter
-              value: unknown
           headers:
             - name: Authorization
               value: 'PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}'
