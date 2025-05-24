@@ -12,7 +12,7 @@ Zabbix 6.4 and higher
 
 ## Tested versions
 
-This template has been tested on Proxmox Backup Server 3.1
+This template has been tested on Proxmox Backup Server 3.1..3.4.1
 
 ## Author
 
