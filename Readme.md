@@ -8,7 +8,7 @@ PBS uses an API, the documentation can be found here: https://pbs.proxmox.com/do
 
 ## Requirements
 
-Zabbix 6.4 and higher
+Zabbix 7.2 and higher
 
 ## Tested versions
 
@@ -107,5 +107,5 @@ Use the resulting Token ID and Secret in the host macros.
 | -------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------- |
 | PBS: Disk [{#DATASTORE.NAME}] Model has changed          | <p>The model identifier has changed.</p>                           | `last(/Proxmox Backup Server by HTTP/pbs.disk.model[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by HTTP/pbs.disk.model[{#DISK.PATH}],#2)`   | Warning  |                                  |
 | PBS: Disk [{#DATASTORE.NAME}] Serial has changed         | <p>The Serial number has changed.</p>                              | `last(/Proxmox Backup Server by HTTP/pbs.disk.serial[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by HTTP/pbs.disk.serial[{#DISK.PATH}],#2)` | Warning  |                                  |
-| PBS: Disk [{#DATASTORE.NAME}] Status indicates a problem | <p>The Status indicator shows some different from 'unknown'.</p>   | `find(/Proxmox Backup Server by HTTP/pbs.disk.status[{#DISK.PATH}],,"like","unknown")=0`                                                       | Warning  |                                  |
+| PBS: Disk [{#DATASTORE.NAME}] Status indicates a problem | <p>The Status indicator shows 'failed'.</p>   | `find(/Proxmox Backup Server by HTTP/pbs.disk.status[{#DISK.PATH}],,"like","failed")=1`                                                       | Warning  |                                  |
 | PBS: Disk [{#DATASTORE.NAME}] Used has changed           | <p>The disk is being reported as used differently than before.</p> | `last(/Proxmox Backup Server by HTTP/pbs.disk.used[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by HTTP/pbs.disk.used[{#DISK.PATH}],#2)`     | Warning  |                                  |
