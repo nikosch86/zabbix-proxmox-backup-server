@@ -1,5 +1,5 @@
 zabbix_export:
-  version: '6.4'
+  version: '7.2'
   template_groups:
     - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
       name: Templates/Applications
@@ -47,6 +47,8 @@ zabbix_export:
               value: '{$PBS.TOKEN.ID}'
           tags:
             - tag: component
+              value: backup
+            - tag: component
               value: system
           triggers:
             - uuid: c824c9e2069b4566b4c0d41d5ae7266e
@@ -58,13 +60,13 @@ zabbix_export:
           type: HTTP_AGENT
           key: pbs.datastore.status
           delay: 5m
-          trends: '0'
+          history: 90d
           value_type: TEXT
           description: 'Get datastore status.'
           preprocessing:
             - type: CHECK_NOT_SUPPORTED
               parameters:
-                - ''
+                - '-1'
               error_handler: CUSTOM_VALUE
               error_handler_params: 'Error getting data'
             - type: JSONPATH
@@ -78,19 +80,21 @@ zabbix_export:
           output_format: JSON
           tags:
             - tag: component
+              value: backup
+            - tag: component
               value: raw
         - uuid: 83c76592aedf4833a63393b5e7b54fb9
           name: 'PBS: Get disks'
           type: HTTP_AGENT
           key: pbs.disks
           delay: 5m
-          trends: '0'
+          history: 90d
           value_type: TEXT
           description: 'Get disks.'
           preprocessing:
             - type: CHECK_NOT_SUPPORTED
               parameters:
-                - ''
+                - '-1'
               error_handler: CUSTOM_VALUE
               error_handler_params: 'Error getting data'
             - type: JSONPATH
@@ -104,19 +108,21 @@ zabbix_export:
           output_format: JSON
           tags:
             - tag: component
+              value: backup
+            - tag: component
               value: raw
         - uuid: 17e7c9ee749946aaaf19ae4f1148f0d1
           name: 'PBS: Get failed tasks'
           type: HTTP_AGENT
           key: pbs.tasks.error
           delay: 5m
-          trends: '0'
+          history: 90d
           value_type: TEXT
           description: 'Get erroneuous tasks.'
           preprocessing:
             - type: CHECK_NOT_SUPPORTED
               parameters:
-                - ''
+                - '-1'
               error_handler: CUSTOM_VALUE
               error_handler_params: 'Error getting data'
             - type: JSONPATH
@@ -158,6 +164,8 @@ zabbix_export:
           output_format: JSON
           tags:
             - tag: component
+              value: backup
+            - tag: component
               value: raw
           triggers:
             - uuid: 4ed0f3d92ddd49ceb0910bfd2c974232
@@ -173,13 +181,14 @@ zabbix_export:
           name: 'PBS: Datastore discovery'
           type: DEPENDENT
           key: pbs.datastore.discovery
-          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
           item_prototypes:
             - uuid: 60f2c0498c414dfdab7e80cc7ea2985b
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Available Size'
               type: DEPENDENT
               key: 'pbs.datastore.available[{#DATASTORE.NAME}]'
-              delay: '0'
+              history: 90d
               units: bytes
               description: 'Available size of datastore in bytes.'
               preprocessing:
@@ -208,8 +217,7 @@ zabbix_export:
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Error'
               type: DEPENDENT
               key: 'pbs.datastore.error[{#DATASTORE.NAME}]'
-              delay: '0'
-              trends: '0'
+              history: 90d
               value_type: TEXT
               description: 'Error status of datastore.'
               preprocessing:
@@ -238,8 +246,7 @@ zabbix_export:
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Full Date'
               type: DEPENDENT
               key: 'pbs.datastore.estimatedfulldate[{#DATASTORE.NAME}]'
-              delay: '0'
-              trends: '0'
+              history: 90d
               value_type: TEXT
               description: |
                 Estimation of the Date Time Stamp when the storage will be full.
@@ -271,7 +278,7 @@ zabbix_export:
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Seconds to Full'
               type: DEPENDENT
               key: 'pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}]'
-              delay: '0'
+              history: 90d
               description: |
                 Estimation of the UNIX epoch when the storage will be full.
                 It's calculated via a simple Linear Regression (Least Squares) over the RRD data of the
@@ -312,8 +319,7 @@ zabbix_export:
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Time to Full'
               type: DEPENDENT
               key: 'pbs.datastore.estimatedtimetofull[{#DATASTORE.NAME}]'
-              delay: '0'
-              trends: '0'
+              history: 90d
               value_type: TEXT
               description: |
                 Estimation of the Time until the storage will be full.
@@ -357,7 +363,7 @@ zabbix_export:
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Total Size'
               type: DEPENDENT
               key: 'pbs.datastore.total[{#DATASTORE.NAME}]'
-              delay: '0'
+              history: 90d
               units: bytes
               description: 'Total size of datastore in bytes.'
               preprocessing:
@@ -375,7 +381,7 @@ zabbix_export:
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Used Size'
               type: DEPENDENT
               key: 'pbs.datastore.used[{#DATASTORE.NAME}]'
-              delay: '0'
+              history: 90d
               units: bytes
               description: 'Used size of datastore in bytes.'
               preprocessing:
@@ -401,14 +407,14 @@ zabbix_export:
           name: 'PBS: Disk discovery'
           type: DEPENDENT
           key: pbs.disk.discovery
-          delay: '0'
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
           item_prototypes:
             - uuid: 85501120e36d48589a52d56d0dec55d7
               name: 'PBS: Disk [{#DISK.PATH}] Model'
               type: DEPENDENT
               key: 'pbs.disk.model[{#DISK.PATH}]'
-              delay: '0'
-              trends: '0'
+              history: 90d
               value_type: TEXT
               description: 'Model of the disk.'
               preprocessing:
@@ -430,8 +436,7 @@ zabbix_export:
               name: 'PBS: Disk [{#DISK.PATH}] Name'
               type: DEPENDENT
               key: 'pbs.disk.name[{#DISK.PATH}]'
-              delay: '0'
-              trends: '0'
+              history: 90d
               value_type: TEXT
               description: 'Name of the disk.'
               preprocessing:
@@ -447,8 +452,7 @@ zabbix_export:
               name: 'PBS: Disk [{#DISK.PATH}] Serial'
               type: DEPENDENT
               key: 'pbs.disk.serial[{#DISK.PATH}]'
-              delay: '0'
-              trends: '0'
+              history: 90d
               value_type: TEXT
               description: 'Serial of the disk.'
               preprocessing:
@@ -470,7 +474,7 @@ zabbix_export:
               name: 'PBS: Disk [{#DISK.PATH}] Size'
               type: DEPENDENT
               key: 'pbs.disk.size[{#DISK.PATH}]'
-              delay: '0'
+              history: 90d
               units: bytes
               description: 'Total Size of disk in bytes.'
               preprocessing:
@@ -486,8 +490,7 @@ zabbix_export:
               name: 'PBS: Disk [{#DISK.PATH}] Status'
               type: DEPENDENT
               key: 'pbs.disk.status[{#DISK.PATH}]'
-              delay: '0'
-              trends: '0'
+              history: 90d
               value_type: TEXT
               description: 'Disk status.'
               preprocessing:
@@ -499,9 +502,12 @@ zabbix_export:
                     - 1h
               master_item:
                 key: pbs.disks
+              tags:
+                - tag: component
+                  value: pbs_disk
               trigger_prototypes:
                 - uuid: 0ebb109edcbc40d095945ca9a530dc5f
-                  expression: 'find(/Proxmox Backup Server by HTTP/pbs.disk.status[{#DISK.PATH}],,"like","unknown")=0'
+                  expression: 'find(/Proxmox Backup Server by HTTP/pbs.disk.status[{#DISK.PATH}],,"like","failed")=1'
                   name: 'PBS: Disk [{#DISK.PATH}] Status indicates a problem'
                   priority: WARNING
                   manual_close: 'YES'
@@ -509,8 +515,7 @@ zabbix_export:
               name: 'PBS: Disk [{#DISK.PATH}] Used'
               type: DEPENDENT
               key: 'pbs.disk.used[{#DISK.PATH}]'
-              delay: '0'
-              trends: '0'
+              history: 90d
               value_type: TEXT
               description: 'Indicates where (and if) that disk is used by PBS.'
               preprocessing:
@@ -532,8 +537,7 @@ zabbix_export:
               name: 'PBS: Disk [{#DISK.PATH}] Vendor'
               type: DEPENDENT
               key: 'pbs.disk.vendor[{#DISK.PATH}]'
-              delay: '0'
-              trends: '0'
+              history: 90d
               value_type: TEXT
               description: 'Vendor of the disk.'
               preprocessing:
@@ -549,8 +553,7 @@ zabbix_export:
               name: 'PBS: Disk [{#DISK.PATH}] Wearout'
               type: DEPENDENT
               key: 'pbs.disk.wearout[{#DISK.PATH}]'
-              delay: '0'
-              trends: '0'
+              history: 90d
               value_type: TEXT
               description: 'Wearout indicator.'
               preprocessing:
@@ -583,6 +586,9 @@ zabbix_export:
               path: $.vendor
             - lld_macro: '{#DISK.WEAROUT}'
               path: $.wearout
+      tags:
+        - tag: component
+          value: backup
       macros:
         - macro: '{$PBS.DATASTORE.AVAILABLE.MIN}'
           value: '10737418240'
