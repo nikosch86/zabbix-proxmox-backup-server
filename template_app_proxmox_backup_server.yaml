@@ -1,5 +1,5 @@
 zabbix_export:
-  version: '7.2'
+  version: '6.4'
   template_groups:
     - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
       name: Templates/Applications
@@ -182,7 +182,6 @@ zabbix_export:
           type: DEPENDENT
           key: pbs.datastore.discovery
           lifetime: 30d
-          enabled_lifetime_type: DISABLE_NEVER
           item_prototypes:
             - uuid: 60f2c0498c414dfdab7e80cc7ea2985b
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Available Size'
@@ -408,7 +407,6 @@ zabbix_export:
           type: DEPENDENT
           key: pbs.disk.discovery
           lifetime: 30d
-          enabled_lifetime_type: DISABLE_NEVER
           item_prototypes:
             - uuid: 85501120e36d48589a52d56d0dec55d7
               name: 'PBS: Disk [{#DISK.PATH}] Model'

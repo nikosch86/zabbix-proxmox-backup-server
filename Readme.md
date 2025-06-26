@@ -8,7 +8,7 @@ PBS uses an API, the documentation can be found here: https://pbs.proxmox.com/do
 
 ## Requirements
 
-Zabbix 7.2 and higher
+Zabbix 6.4 and higher
 
 ## Tested versions
 
