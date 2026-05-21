@@ -1,5 +1,5 @@
 zabbix_export:
-  version: '6.4'
+  version: '7.2'
   template_groups:
     - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
       name: Templates/Applications
@@ -7,6 +7,22 @@ zabbix_export:
     - uuid: 8e155e663e5c4a3f93a765d6c30b70cd
       template: 'Proxmox Backup Server by HTTP'
       name: 'Proxmox Backup Server by HTTP'
+      description: |
+        Template for monitoring Proxmox Backup Server (PBS) via its HTTP API.
+
+        It collects datastore usage, disk health and wearout, and failed task
+        information through the PBS REST API, and discovers datastores and disks
+        via low-level discovery.
+
+        Setup:
+        Create a monitoring user and an API token with at least the "Audit" role
+        on path "/", then set the {$PBS.HOST}, {$PBS.TOKEN.ID} and
+        {$PBS.TOKEN.SECRET} macros on the host.
+
+        API documentation: https://pbs.proxmox.com/docs/api-viewer/index.html
+
+        Template author: nikosch86
+        Source and issue tracker: https://github.com/nikosch86/zabbix-proxmox-backup-server
       groups:
         - name: Templates/Applications
       items:
@@ -47,20 +63,19 @@ zabbix_export:
               value: '{$PBS.TOKEN.ID}'
           tags:
             - tag: component
-              value: backup
-            - tag: component
               value: system
           triggers:
             - uuid: c824c9e2069b4566b4c0d41d5ae7266e
               expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
               name: 'PBS: API service not available'
               priority: HIGH
+              description: 'The API service is not available. Check the network connection, the PBS service status and the API token authorization settings.'
         - uuid: ddea6e9d77c04fedb237d1bf72d22778
           name: 'PBS: Get datastore status'
           type: HTTP_AGENT
           key: pbs.datastore.status
           delay: 5m
-          history: 90d
+          history: 7d
           value_type: TEXT
           description: 'Get datastore status.'
           preprocessing:
@@ -80,15 +95,13 @@ zabbix_export:
           output_format: JSON
           tags:
             - tag: component
-              value: backup
-            - tag: component
               value: raw
         - uuid: 83c76592aedf4833a63393b5e7b54fb9
           name: 'PBS: Get disks'
           type: HTTP_AGENT
           key: pbs.disks
           delay: 5m
-          history: 90d
+          history: 7d
           value_type: TEXT
           description: 'Get disks.'
           preprocessing:
@@ -108,15 +121,13 @@ zabbix_export:
           output_format: JSON
           tags:
             - tag: component
-              value: backup
-            - tag: component
               value: raw
         - uuid: 17e7c9ee749946aaaf19ae4f1148f0d1
           name: 'PBS: Get failed tasks'
           type: HTTP_AGENT
           key: pbs.tasks.error
           delay: 5m
-          history: 90d
+          history: 7d
           value_type: TEXT
           description: 'Get erroneuous tasks.'
           preprocessing:
@@ -164,8 +175,6 @@ zabbix_export:
           output_format: JSON
           tags:
             - tag: component
-              value: backup
-            - tag: component
               value: raw
           triggers:
             - uuid: 4ed0f3d92ddd49ceb0910bfd2c974232
@@ -176,12 +185,16 @@ zabbix_export:
               opdata: '{ITEM.VALUE}'
               priority: HIGH
               description: 'Erroneus tasks that occured within the last {$PBS.TASKS.DAYS} days have been found.'
+              dependencies:
+                - name: 'PBS: API service not available'
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
       discovery_rules:
         - uuid: 5eec729d0e1c4e529cdc884a6c5887db
           name: 'PBS: Datastore discovery'
           type: DEPENDENT
           key: pbs.datastore.discovery
           lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
           item_prototypes:
             - uuid: 60f2c0498c414dfdab7e80cc7ea2985b
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Available Size'
@@ -212,6 +225,9 @@ zabbix_export:
                   name: 'PBS: Datastore [{#DATASTORE.NAME}] Available Size'
                   priority: HIGH
                   description: 'Datastore [{#DATASTORE.NAME}] has less than {$PBS.DATASTORE.AVAILABLE.MIN:"{#DATASTORE.NAME}"} bytes available.'
+                  dependencies:
+                    - name: 'PBS: API service not available'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
             - uuid: 75d30b86c1234fb08f90b5f6cbe958af
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Error'
               type: DEPENDENT
@@ -241,6 +257,9 @@ zabbix_export:
                   name: 'PBS: Datastore [{#DATASTORE.NAME}] Error'
                   priority: HIGH
                   description: 'Datastore [{#DATASTORE.NAME}] is reporting an error!'
+                  dependencies:
+                    - name: 'PBS: API service not available'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
             - uuid: a75f614f0bfa43b6b2c6d70456098dad
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Full Date'
               type: DEPENDENT
@@ -309,11 +328,17 @@ zabbix_export:
                   name: 'PBS: Datastore [{#DATASTORE.NAME}] filling up within one month'
                   priority: HIGH
                   description: 'Datastore [{#DATASTORE.NAME}] is filling up.'
+                  dependencies:
+                    - name: 'PBS: API service not available'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
                 - uuid: f8899123a86144a0a306a77143c681cb
                   expression: 'last(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}])<604800 and last(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}])>0'
                   name: 'PBS: Datastore [{#DATASTORE.NAME}] filling up within one week'
                   priority: HIGH
                   description: 'Datastore [{#DATASTORE.NAME}] is filling up.'
+                  dependencies:
+                    - name: 'PBS: API service not available'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
             - uuid: 980e2da86ba74e5c9ca85b1ac308352d
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Time to Full'
               type: DEPENDENT
@@ -407,6 +432,7 @@ zabbix_export:
           type: DEPENDENT
           key: pbs.disk.discovery
           lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
           item_prototypes:
             - uuid: 85501120e36d48589a52d56d0dec55d7
               name: 'PBS: Disk [{#DISK.PATH}] Model'
@@ -424,12 +450,21 @@ zabbix_export:
                     - 1h
               master_item:
                 key: pbs.disks
+              tags:
+                - tag: component
+                  value: pbs_disk
+                - tag: disk
+                  value: '{#DISK.PATH}'
               trigger_prototypes:
                 - uuid: bcd531f0197143c38860a24e1ef2ee5b
                   expression: 'last(/Proxmox Backup Server by HTTP/pbs.disk.model[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by HTTP/pbs.disk.model[{#DISK.PATH}],#2)'
                   name: 'PBS: Disk [{#DISK.PATH}] Model has changed'
                   priority: WARNING
+                  description: 'The disk model reported for this device path has changed, which usually indicates the physical disk was replaced.'
                   manual_close: 'YES'
+                  dependencies:
+                    - name: 'PBS: API service not available'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
             - uuid: ff389bb665884d11b41b77c5b932bbd0
               name: 'PBS: Disk [{#DISK.PATH}] Name'
               type: DEPENDENT
@@ -446,6 +481,11 @@ zabbix_export:
                     - 1h
               master_item:
                 key: pbs.disks
+              tags:
+                - tag: component
+                  value: pbs_disk
+                - tag: disk
+                  value: '{#DISK.PATH}'
             - uuid: 485d2a3a98e944008618a91cd43c30f3
               name: 'PBS: Disk [{#DISK.PATH}] Serial'
               type: DEPENDENT
@@ -462,12 +502,21 @@ zabbix_export:
                     - 1h
               master_item:
                 key: pbs.disks
+              tags:
+                - tag: component
+                  value: pbs_disk
+                - tag: disk
+                  value: '{#DISK.PATH}'
               trigger_prototypes:
                 - uuid: f07a872469d94d0dae3b955656593f66
                   expression: 'last(/Proxmox Backup Server by HTTP/pbs.disk.serial[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by HTTP/pbs.disk.serial[{#DISK.PATH}],#2)'
                   name: 'PBS: Disk [{#DISK.PATH}] Serial has changed'
                   priority: WARNING
+                  description: 'The disk serial number reported for this device path has changed, which usually indicates the physical disk was replaced.'
                   manual_close: 'YES'
+                  dependencies:
+                    - name: 'PBS: API service not available'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
             - uuid: 7c31eaeb57f14ab9b457fa6e968b9ca4
               name: 'PBS: Disk [{#DISK.PATH}] Size'
               type: DEPENDENT
@@ -484,6 +533,11 @@ zabbix_export:
                     - 1h
               master_item:
                 key: pbs.disks
+              tags:
+                - tag: component
+                  value: pbs_disk
+                - tag: disk
+                  value: '{#DISK.PATH}'
             - uuid: 3d5ddd6ae9c84ded8f82da383a986d25
               name: 'PBS: Disk [{#DISK.PATH}] Status'
               type: DEPENDENT
@@ -503,12 +557,18 @@ zabbix_export:
               tags:
                 - tag: component
                   value: pbs_disk
+                - tag: disk
+                  value: '{#DISK.PATH}'
               trigger_prototypes:
                 - uuid: 0ebb109edcbc40d095945ca9a530dc5f
                   expression: 'find(/Proxmox Backup Server by HTTP/pbs.disk.status[{#DISK.PATH}],,"like","failed")=1'
                   name: 'PBS: Disk [{#DISK.PATH}] Status indicates a problem'
                   priority: WARNING
+                  description: 'The disk SMART health status reported by PBS is "failed".'
                   manual_close: 'YES'
+                  dependencies:
+                    - name: 'PBS: API service not available'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
             - uuid: 4e4148965fd9483bbc1ba7c145368bba
               name: 'PBS: Disk [{#DISK.PATH}] Used'
               type: DEPENDENT
@@ -525,12 +585,21 @@ zabbix_export:
                     - 1h
               master_item:
                 key: pbs.disks
+              tags:
+                - tag: component
+                  value: pbs_disk
+                - tag: disk
+                  value: '{#DISK.PATH}'
               trigger_prototypes:
                 - uuid: 64b7d1789dd44d9eabaf3b072548a4db
                   expression: 'last(/Proxmox Backup Server by HTTP/pbs.disk.used[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by HTTP/pbs.disk.used[{#DISK.PATH}],#2)'
                   name: 'PBS: Disk [{#DISK.PATH}] Used has changed'
                   priority: WARNING
+                  description: 'The usage of this disk reported by PBS has changed, for example it was added to or removed from a datastore.'
                   manual_close: 'YES'
+                  dependencies:
+                    - name: 'PBS: API service not available'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
             - uuid: 3a781863820548b78994156dff6b5175
               name: 'PBS: Disk [{#DISK.PATH}] Vendor'
               type: DEPENDENT
@@ -547,22 +616,46 @@ zabbix_export:
                     - 1h
               master_item:
                 key: pbs.disks
+              tags:
+                - tag: component
+                  value: pbs_disk
+                - tag: disk
+                  value: '{#DISK.PATH}'
             - uuid: 791a4b27bf53470cad24018548b2439d
               name: 'PBS: Disk [{#DISK.PATH}] Wearout'
               type: DEPENDENT
               key: 'pbs.disk.wearout[{#DISK.PATH}]'
               history: 90d
-              value_type: TEXT
-              description: 'Wearout indicator.'
+              value_type: FLOAT
+              units: '%'
+              description: |
+                Disk wearout reported by PBS, as a percentage.
+                Note: the direction of this value (whether a higher number means more or
+                less wear) is SSD-model dependent and not standardized across vendors.
+                The value is discarded for disks that do not report numeric wearout data.
               preprocessing:
                 - type: JSONPATH
                   parameters:
                     - '$.[?(@.devpath == ''{#DISK.PATH}'')].wearout.first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var n = parseFloat(value);
+                      if (isNaN(n)) {
+                          throw 'No numeric wearout data reported for this disk';
+                      }
+                      return n;
+                  error_handler: DISCARD_VALUE
                 - type: DISCARD_UNCHANGED_HEARTBEAT
                   parameters:
                     - 1h
               master_item:
                 key: pbs.disks
+              tags:
+                - tag: component
+                  value: pbs_disk
+                - tag: disk
+                  value: '{#DISK.PATH}'
           master_item:
             key: pbs.disks
           lld_macro_paths:
@@ -590,18 +683,23 @@ zabbix_export:
       macros:
         - macro: '{$PBS.DATASTORE.AVAILABLE.MIN}'
           value: '10737418240'
+          description: 'Minimum available space in a datastore, in bytes (defaults to 10 GB). Can be overridden per datastore using the {#DATASTORE.NAME} macro context.'
         - macro: '{$PBS.HOST}'
-          value: '<HOSTNAME>'
+          value: '<SET PBS HOSTNAME>'
+          description: 'Hostname or IP address of the PBS server API endpoint. Must be set on the host.'
         - macro: '{$PBS.PORT}'
           value: '8007'
+          description: 'The API uses the HTTPS protocol and the server listens on port 8007 by default.'
         - macro: '{$PBS.TASKS.DAYS}'
           value: '2'
-          description: 'Age of tasks to consider when looking for failed tasks (days)'
+          description: 'Age of tasks to consider when looking for failed tasks (days).'
         - macro: '{$PBS.TOKEN.ID}'
           value: USER@REALM!TOKENID
           description: 'API tokens allow stateless access to most parts of the REST API by another system, software or API client.'
         - macro: '{$PBS.TOKEN.SECRET}'
+          type: SECRET_TEXT
           value: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+          description: 'Secret key of the API token.'
       valuemaps:
         - uuid: b4e066bfeb334388a8fb9f30ad844459
           name: 'HTTP response status code'
