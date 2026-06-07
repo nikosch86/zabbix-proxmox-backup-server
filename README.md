@@ -32,6 +32,14 @@ Set the following access levels for the User and the Token:
 
 Use the resulting Token ID and Secret in the host macros.
 
+### TLS certificate verification
+
+The template verifies the PBS server's TLS certificate by default and will **not** connect to a server presenting an untrusted (e.g. self-signed) certificate. The HTTP agent items have *SSL verify peer* and *SSL verify host* enabled, and the `PBS: API service status` script item validates the certificate as well.
+
+PBS ships with a self-signed certificate by default. To monitor such a server, add its certificate (or the issuing CA) to the trusted CA store of the Zabbix server — and of every Zabbix proxy that runs the checks — and point `SSLCALocation` at it, then restart the service.
+
+Trusting the certificate at the server is the only option that also covers the API status check: that script item verifies independently and, because the embedded `HttpRequest` object exposes no SSL toggle, its verification cannot be disabled per item. Merely unchecking *SSL verify peer/host* on the HTTP agent items would leave the API status check failing.
+
 ### Macros used
 
 | Name                           | Description                                                                                                                                              | Default                                |
@@ -61,9 +69,9 @@ Use the resulting Token ID and Secret in the host macros.
 
 ### LLD rule Datastore discovery
 
-| Name                     | Description | Type           | Key and additional info |
-| ------------------------ | ----------- | -------------- | ----------------------- |
-| PBS: Datastore discovery |             | Dependent item | pbs.datastore.discovery |
+| Name                     | Description                                                                                       | Type           | Key and additional info |
+| ------------------------ | ------------------------------------------------------------------------------------------------ | -------------- | ----------------------- |
+| PBS: Datastore discovery | <p>Discovers the datastores configured on the Proxmox Backup Server from the datastore-usage endpoint.</p> | Dependent item | pbs.datastore.discovery |
 
 ### Item prototypes for Datastore discovery
 
@@ -88,9 +96,9 @@ Use the resulting Token ID and Secret in the host macros.
 
 ### LLD rule Disk discovery
 
-| Name                | Description | Type           | Key and additional info |
-| ------------------- | ----------- | -------------- | ----------------------- |
-| PBS: Disk discovery |             | Dependent item | pbs.disk.discovery      |
+| Name                | Description                                                                                            | Type           | Key and additional info |
+| ------------------- | ----------------------------------------------------------------------------------------------------- | -------------- | ----------------------- |
+| PBS: Disk discovery | <p>Discovers the physical disks reported by the Proxmox Backup Server node from the disk list endpoint.</p> | Dependent item | pbs.disk.discovery      |
 
 ### Item prototypes for Disk discovery
 

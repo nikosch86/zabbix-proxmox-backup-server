@@ -9,18 +9,18 @@ zabbix_export:
       name: 'Proxmox Backup Server by HTTP'
       description: |
         Template for monitoring Proxmox Backup Server (PBS) via its HTTP API.
-        
+
         It collects datastore usage, disk health and wearout, and failed task
         information through the PBS REST API, and discovers datastores and disks
         via low-level discovery.
-        
+
         Setup:
         Create a monitoring user and an API token with at least the "Audit" role
         on path "/", then set the {$PBS.HOST}, {$PBS.TOKEN.ID} and
         {$PBS.TOKEN.SECRET} macros on the host.
-        
+
         API documentation: https://pbs.proxmox.com/docs/api-viewer/index.html
-        
+
         Template author: nikosch86
         Source and issue tracker: https://github.com/nikosch86/zabbix-proxmox-backup-server
       groups:
@@ -37,7 +37,7 @@ zabbix_export:
               var params = JSON.parse(value);
               var req = new HttpRequest();
               req.addHeader('Authorization: PBSAPIToken=' + params.token + ':' + params.secret);
-              req.get(encodeURI('https://' + params.host + ':' + params.port + '/api2/json/version'));  
+              req.get(encodeURI('https://' + params.host + ':' + params.port + '/api2/json/version'));
             } catch (error) {
                 Zabbix.log(3, "Proxmox Backup Server API failed: " + params.host + " Error: " + error);
                 if (!Number.isInteger(error))
@@ -93,6 +93,8 @@ zabbix_export:
             - name: Authorization
               value: 'PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}'
           output_format: JSON
+          verify_peer: 'YES'
+          verify_host: 'YES'
           tags:
             - tag: component
               value: raw
@@ -119,6 +121,8 @@ zabbix_export:
             - name: Authorization
               value: 'PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}'
           output_format: JSON
+          verify_peer: 'YES'
+          verify_host: 'YES'
           tags:
             - tag: component
               value: raw
@@ -147,7 +151,7 @@ zabbix_export:
                   const daysInSeconds = daysAgo * 86400;
                   const currentTimestamp = Math.floor(Date.now() / 1000);
                   const thresholdTimestamp = currentTimestamp - daysInSeconds;
-                  
+
                   tasks = JSON.parse(value);
                   if (tasks instanceof Array) {
                       tasks.forEach(function (task) {
@@ -156,7 +160,7 @@ zabbix_export:
                           }
                       });
                   }
-                  
+
                   return JSON.stringify(result);
           timeout: 10s
           url: 'https://{$PBS.HOST}:{$PBS.PORT}/api2/json/nodes/0/tasks'
@@ -173,6 +177,8 @@ zabbix_export:
             - name: Authorization
               value: 'PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}'
           output_format: JSON
+          verify_peer: 'YES'
+          verify_host: 'YES'
           tags:
             - tag: component
               value: raw
@@ -195,6 +201,7 @@ zabbix_export:
           key: pbs.datastore.discovery
           lifetime: 30d
           enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers the datastores configured on the Proxmox Backup Server from the datastore-usage endpoint.'
           item_prototypes:
             - uuid: 60f2c0498c414dfdab7e80cc7ea2985b
               name: 'PBS: Datastore [{#DATASTORE.NAME}] Available Size'
@@ -361,18 +368,18 @@ zabbix_export:
                       var current_unixtime = Math.floor(Date.now() / 1000);
                       var delta = value - current_unixtime;
                       if (delta < 0) return "Never";
-                      
+
                       var days = Math.floor(delta / 86400);
                       delta -= days * 86400;
-                      
+
                       var hours = Math.floor(delta / 3600) % 24;
                       delta -= hours * 3600;
-                      
+
                       var minutes = Math.floor(delta / 60) % 60;
                       delta -= minutes * 60;
-                      
+
                       var seconds = Math.floor(delta % 60);
-                      
+
                       return days+" Days "+hours+":"+minutes+":"+seconds+" (Hours:Minutes:Seconds)";
                 - type: DISCARD_UNCHANGED_HEARTBEAT
                   parameters:
@@ -434,6 +441,7 @@ zabbix_export:
           key: pbs.disk.discovery
           lifetime: 30d
           enabled_lifetime_type: DISABLE_NEVER
+          description: 'Discovers the physical disks reported by the Proxmox Backup Server node from the disk list endpoint.'
           item_prototypes:
             - uuid: 85501120e36d48589a52d56d0dec55d7
               name: 'PBS: Disk [{#DISK.PATH}] Model'
