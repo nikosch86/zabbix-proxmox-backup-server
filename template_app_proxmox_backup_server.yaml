@@ -332,18 +332,20 @@ zabbix_export:
                   value: '{#DATASTORE.NAME}'
               trigger_prototypes:
                 - uuid: 48c8a3296a0d49e5b000646527a9906d
-                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}])<2419200 and last(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}])>0'
+                  expression: 'max(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)<2419200 and min(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)>0'
                   name: 'PBS: Datastore [{#DATASTORE.NAME}] filling up within one month'
-                  priority: HIGH
-                  description: 'Datastore [{#DATASTORE.NAME}] is filling up.'
+                  priority: WARNING
+                  description: 'Datastore [{#DATASTORE.NAME}] is projected to fill within one month.'
                   dependencies:
                     - name: 'PBS: API service not available'
                       expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
+                    - name: 'PBS: Datastore [{#DATASTORE.NAME}] filling up within one week'
+                      expression: 'max(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)<604800 and min(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)>0'
                 - uuid: f8899123a86144a0a306a77143c681cb
-                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}])<604800 and last(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}])>0'
+                  expression: 'max(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)<604800 and min(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)>0'
                   name: 'PBS: Datastore [{#DATASTORE.NAME}] filling up within one week'
                   priority: HIGH
-                  description: 'Datastore [{#DATASTORE.NAME}] is filling up.'
+                  description: 'Datastore [{#DATASTORE.NAME}] is projected to fill within one week.'
                   dependencies:
                     - name: 'PBS: API service not available'
                       expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
