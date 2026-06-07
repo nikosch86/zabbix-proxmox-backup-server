@@ -686,6 +686,19 @@ zabbix_export:
               path: $.vendor
             - lld_macro: '{#DISK.WEAROUT}'
               path: $.wearout
+          overrides:
+            - name: 'No wearout item for disks without numeric wearout'
+              step: '1'
+              filter:
+                conditions:
+                  - macro: '{#DISK.WEAROUT}'
+                    value: '^[0-9.]+$'
+                    operator: NOT_MATCHES_REGEX
+              operations:
+                - operationobject: ITEM_PROTOTYPE
+                  operator: LIKE
+                  value: Wearout
+                  discover: NO_DISCOVER
       macros:
         - macro: '{$PBS.DATASTORE.AVAILABLE.MIN}'
           value: '10737418240'

@@ -113,6 +113,8 @@ Trusting the certificate at the server is the only option that also covers the A
 | PBS: Disk [{#DISK.PATH}] Vendor | <p>Vendor of the disk.</p>                               | Dependent item | pbs.disk.vendor[{#DISK.PATH}]<p>**Preprocessing**</p><ul><li><p>JSONPath: `$.[?(@.devpath == '{#DISK.PATH}')].vendor.first()`</p></li><li><p>Discard unchanged with heartbeat: `1h`</p></li></ul>      |
 | PBS: Disk [{#DISK.PATH}] Wearout | <p>Disk wearout reported by PBS, as a percentage. The direction (whether a higher number means more or less wear) is SSD-model dependent and not standardized across vendors. Discarded for disks that do not report numeric wearout data.</p> | Dependent item | pbs.disk.wearout[{#DISK.PATH}]<p>**Preprocessing**</p><ul><li><p>JSONPath: `$.[?(@.devpath == '{#DISK.PATH}')].wearout.first()`</p></li><li><p>JavaScript: parse to a number; discard the value if non-numeric</p></li><li><p>Discard unchanged with heartbeat: `1h`</p></li></ul> |
 
+> **Discovery override:** `PBS: Disk [{#DISK.PATH}] Wearout` is only discovered for disks that report a numeric wearout value (e.g. SSDs). Disks that report no wearout (typically HDDs) are excluded from this one item prototype via an LLD override (`{#DISK.WEAROUT}` not matching `^[0-9.]+$`), so they do not create an empty "no data" wearout item.
+
 ### Trigger prototypes for Disk discovery
 
 | Name                                            | Description | Expression                                                                                                                                     | Severity | Dependencies and additional info |
