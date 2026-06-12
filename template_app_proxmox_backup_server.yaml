@@ -128,9 +128,9 @@ zabbix_export:
             - tag: component
               value: raw
         - uuid: 430dbc8869df4f5a9083055812c4c85a
-          name: 'PBS: Get snapshots'
+          name: 'PBS: Get backup groups'
           type: SCRIPT
-          key: pbs.snapshots
+          key: pbs.backupgroups
           delay: '{$PBS.SNAPSHOT.INTERVAL}'
           history: 1d
           value_type: TEXT
@@ -150,40 +150,32 @@ zabbix_export:
                 if (store.error) {
                     return;
                 }
-                var snapResp = req.get(encodeURI(base + '/admin/datastore/' + store.store + '/snapshots'));
+                var groupResp = req.get(encodeURI(base + '/admin/datastore/' + store.store + '/groups'));
                 if (req.getStatus() !== 200) {
-                    Zabbix.log(3, 'PBS snapshot list failed for datastore ' + store.store + ': HTTP status ' + req.getStatus());
+                    Zabbix.log(3, 'PBS group list failed for datastore ' + store.store + ': HTTP status ' + req.getStatus());
                     return;
                 }
-                var latest = {};
-                (JSON.parse(snapResp).data || []).forEach(function (snap) {
-                    var group = snap['backup-type'] + '/' + snap['backup-id'];
-                    if (!(group in latest) || snap['backup-time'] > latest[group].last) {
-                        latest[group] = {
-                            type: snap['backup-type'],
-                            id: snap['backup-id'],
-                            last: snap['backup-time']
-                        };
+                (JSON.parse(groupResp).data || []).forEach(function (group) {
+                    if (!(group['last-backup'] > 0)) {
+                        return;
                     }
-                });
-                Object.keys(latest).forEach(function (group) {
                     result.push({
                         datastore: store.store,
-                        group: group,
-                        type: latest[group].type,
-                        id: latest[group].id,
-                        last: latest[group].last
+                        group: group['backup-type'] + '/' + group['backup-id'],
+                        type: group['backup-type'],
+                        id: group['backup-id'],
+                        last: group['last-backup']
                     });
                 });
             });
             return JSON.stringify(result);
           description: |
-            Latest snapshot time per backup group, across all datastores.
-            The per-datastore snapshot lists are reduced to one entry per backup group
-            (the most recent backup-time), so only a small JSON document is stored per
-            poll. Datastores that report an error or cannot be queried are skipped;
-            their freshness items keep their last known value until the datastore
-            recovers (the datastore error trigger covers that condition).
+            Backup groups and their latest snapshot time (last-backup), across all
+            datastores, from the per-datastore groups endpoint. One entry per backup
+            group is stored per poll. Datastores that report an error or cannot be
+            queried are skipped; their freshness items keep their last known value
+            until the datastore recovers (the datastore error trigger covers that
+            condition).
           timeout: 30s
           parameters:
             - name: host
@@ -534,7 +526,7 @@ zabbix_export:
                   parameters:
                     - 'return Math.max(0, Math.floor(Date.now() / 1000) - value);'
               master_item:
-                key: pbs.snapshots
+                key: pbs.backupgroups
               tags:
                 - tag: backup_group
                   value: '{#BACKUP.GROUP}'
@@ -562,7 +554,7 @@ zabbix_export:
                     - name: 'PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than high threshold'
                       expression: 'last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}'
           master_item:
-            key: pbs.snapshots
+            key: pbs.backupgroups
           lld_macro_paths:
             - lld_macro: '{#BACKUP.GROUP}'
               path: $.group
@@ -1096,7 +1088,7 @@ zabbix_export:
           description: 'Last-snapshot age of a backup group above which a WARNING severity trigger fires. Default suits a daily backup schedule. Can be overridden per backup group using the {#BACKUP.GROUP} macro context.'
         - macro: '{$PBS.SNAPSHOT.INTERVAL}'
           value: 15m
-          description: 'Polling interval of the snapshot list item. Listing snapshots returns every snapshot of each datastore, so keep this interval moderate.'
+          description: 'Polling interval of the backup group list used for snapshot freshness. Listing groups scans every backup group of each datastore, so keep this interval moderate.'
         - macro: '{$PBS.TASKS.DAYS}'
           value: '2'
           description: 'Age of tasks to consider when looking for failed tasks (days).'
