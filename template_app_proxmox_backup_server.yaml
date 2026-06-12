@@ -253,15 +253,250 @@ zabbix_export:
           tags:
             - tag: component
               value: raw
+        - uuid: 2c1882c1b4ad475e961922283a62ef2a
+          name: 'PBS: Failed other tasks'
+          type: DEPENDENT
+          key: pbs.tasks.error.other
+          history: 7d
+          value_type: TEXT
+          description: 'Failed tasks within the last {$PBS.TASKS.DAYS} days whose worker type is not covered by the per-worktype items (backup, garbage collection, prune, sync, verify).'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var prefixes = ['backup', 'garbage_collection', 'prune', 'sync', 'verif'];
+                  var result = [];
+                  var tasks = JSON.parse(value);
+                  if (tasks instanceof Array) {
+                      tasks.forEach(function (task) {
+                          var type = String(task.worker_type || '');
+                          var matched = false;
+                          for (var i = 0; i < prefixes.length; i++) {
+                              if (type.indexOf(prefixes[i]) === 0) {
+                                  matched = true;
+                                  break;
+                              }
+                          }
+                          if (!matched) {
+                              result.push(task);
+                          }
+                      });
+                  }
+                  return JSON.stringify(result);
+          master_item:
+            key: pbs.tasks.error
+          tags:
+            - tag: component
+              value: tasks
           triggers:
-            - uuid: 4ed0f3d92ddd49ceb0910bfd2c974232
-              expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error)<>"[]"'
+            - uuid: c445dde077474ebd95939a71ee703605
+              expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.other)<>"[]"'
               recovery_mode: RECOVERY_EXPRESSION
-              recovery_expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error)="[]"'
+              recovery_expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.other)="[]"'
               name: 'PBS: Failed tasks found'
               opdata: '{ITEM.VALUE}'
               priority: HIGH
-              description: 'Erroneus tasks that occured within the last {$PBS.TASKS.DAYS} days have been found.'
+              description: 'Failed tasks occured within the last {$PBS.TASKS.DAYS} days. Catch-all for worker types not covered by the per-worktype triggers (backup, garbage collection, prune, sync, verify).'
+              dependencies:
+                - name: 'PBS: API service not available'
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
+        - uuid: b1e3da2de2ae416393f0ea3cfdd1136b
+          name: 'PBS: Failed backup tasks'
+          type: DEPENDENT
+          key: 'pbs.tasks.error.worktype[backup]'
+          history: 7d
+          value_type: TEXT
+          description: 'Failed backup tasks (worker type prefix "backup") within the last {$PBS.TASKS.DAYS} days.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var result = [];
+                  var tasks = JSON.parse(value);
+                  if (tasks instanceof Array) {
+                      tasks.forEach(function (task) {
+                          if (String(task.worker_type || '').indexOf('backup') === 0) {
+                              result.push(task);
+                          }
+                      });
+                  }
+                  return JSON.stringify(result);
+          master_item:
+            key: pbs.tasks.error
+          tags:
+            - tag: component
+              value: tasks
+            - tag: worktype
+              value: backup
+          triggers:
+            - uuid: ea855b13f3844b65ab0c9cf1839b56dd
+              expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[backup])<>"[]"'
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[backup])="[]"'
+              name: 'PBS: Failed backup tasks found'
+              opdata: '{ITEM.VALUE}'
+              priority: HIGH
+              description: 'Backup tasks failed within the last {$PBS.TASKS.DAYS} days. A client backup did not complete.'
+              dependencies:
+                - name: 'PBS: API service not available'
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
+        - uuid: 10206f1f7fce424ba918989057915596
+          name: 'PBS: Failed garbage collection tasks'
+          type: DEPENDENT
+          key: 'pbs.tasks.error.worktype[garbage_collection]'
+          history: 7d
+          value_type: TEXT
+          description: 'Failed garbage collection tasks (worker type prefix "garbage_collection") within the last {$PBS.TASKS.DAYS} days.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var result = [];
+                  var tasks = JSON.parse(value);
+                  if (tasks instanceof Array) {
+                      tasks.forEach(function (task) {
+                          if (String(task.worker_type || '').indexOf('garbage_collection') === 0) {
+                              result.push(task);
+                          }
+                      });
+                  }
+                  return JSON.stringify(result);
+          master_item:
+            key: pbs.tasks.error
+          tags:
+            - tag: component
+              value: tasks
+            - tag: worktype
+              value: garbage_collection
+          triggers:
+            - uuid: b70d0d49346348e2be5e947c8a210ac7
+              expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[garbage_collection])<>"[]"'
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[garbage_collection])="[]"'
+              name: 'PBS: Failed garbage collection tasks found'
+              opdata: '{ITEM.VALUE}'
+              priority: AVERAGE
+              description: 'Garbage collection tasks failed within the last {$PBS.TASKS.DAYS} days. Unused chunks are not being reclaimed.'
+              dependencies:
+                - name: 'PBS: API service not available'
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
+        - uuid: e41476ecb438420ca881d07b0e372264
+          name: 'PBS: Failed prune tasks'
+          type: DEPENDENT
+          key: 'pbs.tasks.error.worktype[prune]'
+          history: 7d
+          value_type: TEXT
+          description: 'Failed prune tasks (worker type prefix "prune", covering manual and scheduled prune jobs) within the last {$PBS.TASKS.DAYS} days.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var result = [];
+                  var tasks = JSON.parse(value);
+                  if (tasks instanceof Array) {
+                      tasks.forEach(function (task) {
+                          if (String(task.worker_type || '').indexOf('prune') === 0) {
+                              result.push(task);
+                          }
+                      });
+                  }
+                  return JSON.stringify(result);
+          master_item:
+            key: pbs.tasks.error
+          tags:
+            - tag: component
+              value: tasks
+            - tag: worktype
+              value: prune
+          triggers:
+            - uuid: 7b410796efa04dbb9a92ea6e67ef802c
+              expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[prune])<>"[]"'
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[prune])="[]"'
+              name: 'PBS: Failed prune tasks found'
+              opdata: '{ITEM.VALUE}'
+              priority: AVERAGE
+              description: 'Prune tasks failed within the last {$PBS.TASKS.DAYS} days. Old snapshots are not being cleaned up.'
+              dependencies:
+                - name: 'PBS: API service not available'
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
+        - uuid: 564ce70f0e7844bd84c336c0ced22738
+          name: 'PBS: Failed sync tasks'
+          type: DEPENDENT
+          key: 'pbs.tasks.error.worktype[sync]'
+          history: 7d
+          value_type: TEXT
+          description: 'Failed sync tasks (worker type prefix "sync", covering manual syncs and scheduled sync jobs) within the last {$PBS.TASKS.DAYS} days.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var result = [];
+                  var tasks = JSON.parse(value);
+                  if (tasks instanceof Array) {
+                      tasks.forEach(function (task) {
+                          if (String(task.worker_type || '').indexOf('sync') === 0) {
+                              result.push(task);
+                          }
+                      });
+                  }
+                  return JSON.stringify(result);
+          master_item:
+            key: pbs.tasks.error
+          tags:
+            - tag: component
+              value: tasks
+            - tag: worktype
+              value: sync
+          triggers:
+            - uuid: 3f3b78733ec14fc9ae01516f43a7c55e
+              expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[sync])<>"[]"'
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[sync])="[]"'
+              name: 'PBS: Failed sync tasks found'
+              opdata: '{ITEM.VALUE}'
+              priority: HIGH
+              description: 'Sync tasks failed within the last {$PBS.TASKS.DAYS} days. Off-site copies are not being replicated.'
+              dependencies:
+                - name: 'PBS: API service not available'
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
+        - uuid: 9608bc608a024b5bb0c6d73ae5e09fab
+          name: 'PBS: Failed verify tasks'
+          type: DEPENDENT
+          key: 'pbs.tasks.error.worktype[verify]'
+          history: 7d
+          value_type: TEXT
+          description: 'Failed verify tasks (worker type prefix "verif", covering manual verification and scheduled verification jobs) within the last {$PBS.TASKS.DAYS} days.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var result = [];
+                  var tasks = JSON.parse(value);
+                  if (tasks instanceof Array) {
+                      tasks.forEach(function (task) {
+                          if (String(task.worker_type || '').indexOf('verif') === 0) {
+                              result.push(task);
+                          }
+                      });
+                  }
+                  return JSON.stringify(result);
+          master_item:
+            key: pbs.tasks.error
+          tags:
+            - tag: component
+              value: tasks
+            - tag: worktype
+              value: verify
+          triggers:
+            - uuid: b90f867121b24a5bb8f37c6cfbdb5fd1
+              expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[verify])<>"[]"'
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: 'last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[verify])="[]"'
+              name: 'PBS: Failed verify tasks found'
+              opdata: '{ITEM.VALUE}'
+              priority: AVERAGE
+              description: 'Verification tasks failed within the last {$PBS.TASKS.DAYS} days. Snapshot integrity is not confirmed.'
               dependencies:
                 - name: 'PBS: API service not available'
                   expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
