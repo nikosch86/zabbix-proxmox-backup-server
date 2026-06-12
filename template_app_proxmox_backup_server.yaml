@@ -10,9 +10,10 @@ zabbix_export:
       description: |
         Template for monitoring Proxmox Backup Server (PBS) via its HTTP API.
 
-        It collects datastore usage, disk health and wearout, and failed task
-        information through the PBS REST API, and discovers datastores and disks
-        via low-level discovery.
+        It collects datastore usage, disk health and wearout, failed task
+        information and per-backup-group snapshot freshness through the PBS REST
+        API, and discovers datastores, disks and backup groups via low-level
+        discovery.
 
         Setup:
         Create a monitoring user and an API token with at least the "Audit" role
@@ -126,6 +127,76 @@ zabbix_export:
           tags:
             - tag: component
               value: raw
+        - uuid: 430dbc8869df4f5a9083055812c4c85a
+          name: 'PBS: Get snapshots'
+          type: SCRIPT
+          key: pbs.snapshots
+          delay: '{$PBS.SNAPSHOT.INTERVAL}'
+          history: 1d
+          value_type: TEXT
+          params: |
+            var params = JSON.parse(value);
+            var base = 'https://' + params.host + ':' + params.port + '/api2/json';
+            var req = new HttpRequest();
+            req.addHeader('Authorization: PBSAPIToken=' + params.token + ':' + params.secret);
+
+            var resp = req.get(encodeURI(base + '/status/datastore-usage'));
+            if (req.getStatus() !== 200) {
+                throw 'Failed to list datastores: HTTP status ' + req.getStatus();
+            }
+
+            var result = [];
+            (JSON.parse(resp).data || []).forEach(function (store) {
+                if (store.error) {
+                    return;
+                }
+                var snapResp = req.get(encodeURI(base + '/admin/datastore/' + store.store + '/snapshots'));
+                if (req.getStatus() !== 200) {
+                    Zabbix.log(3, 'PBS snapshot list failed for datastore ' + store.store + ': HTTP status ' + req.getStatus());
+                    return;
+                }
+                var latest = {};
+                (JSON.parse(snapResp).data || []).forEach(function (snap) {
+                    var group = snap['backup-type'] + '/' + snap['backup-id'];
+                    if (!(group in latest) || snap['backup-time'] > latest[group].last) {
+                        latest[group] = {
+                            type: snap['backup-type'],
+                            id: snap['backup-id'],
+                            last: snap['backup-time']
+                        };
+                    }
+                });
+                Object.keys(latest).forEach(function (group) {
+                    result.push({
+                        datastore: store.store,
+                        group: group,
+                        type: latest[group].type,
+                        id: latest[group].id,
+                        last: latest[group].last
+                    });
+                });
+            });
+            return JSON.stringify(result);
+          description: |
+            Latest snapshot time per backup group, across all datastores.
+            The per-datastore snapshot lists are reduced to one entry per backup group
+            (the most recent backup-time), so only a small JSON document is stored per
+            poll. Datastores that report an error or cannot be queried are skipped;
+            their freshness items keep their last known value until the datastore
+            recovers (the datastore error trigger covers that condition).
+          timeout: 30s
+          parameters:
+            - name: host
+              value: '{$PBS.HOST}'
+            - name: port
+              value: '{$PBS.PORT}'
+            - name: secret
+              value: '{$PBS.TOKEN.SECRET}'
+            - name: token
+              value: '{$PBS.TOKEN.ID}'
+          tags:
+            - tag: component
+              value: raw
         - uuid: 17e7c9ee749946aaaf19ae4f1148f0d1
           name: 'PBS: Get failed tasks'
           type: HTTP_AGENT
@@ -195,6 +266,77 @@ zabbix_export:
                 - name: 'PBS: API service not available'
                   expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
       discovery_rules:
+        - uuid: de800b33f3054bb5a49d5e68f4c7851a
+          name: 'PBS: Backup group discovery'
+          type: DEPENDENT
+          key: pbs.backupgroup.discovery
+          lifetime: 30d
+          enabled_lifetime_type: DISABLE_NEVER
+          description: |
+            Discovers the backup groups (backup-type/backup-id, e.g. host/myclient)
+            that have at least one snapshot in any datastore.
+            Note: a client that has never produced a single snapshot is not
+            discovered and therefore not monitored for freshness.
+          item_prototypes:
+            - uuid: e41c4d860873477a97611b98bb8ca60e
+              name: 'PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] Last Snapshot Age'
+              type: DEPENDENT
+              key: 'pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}]'
+              history: 90d
+              units: s
+              description: |
+                Seconds since the most recent snapshot of backup group {#BACKUP.GROUP}
+                in datastore {#DATASTORE.NAME}.
+                For datastores filled by a sync job the snapshots keep the original
+                backup-time of the source, so on the sync target this measures
+                end-to-end freshness (client backup plus sync).
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.datastore == ''{#DATASTORE.NAME}'' && @.group == ''{#BACKUP.GROUP}'')].last.first()'
+                  error_handler: DISCARD_VALUE
+                - type: JAVASCRIPT
+                  parameters:
+                    - 'return Math.max(0, Math.floor(Date.now() / 1000) - value);'
+              master_item:
+                key: pbs.snapshots
+              tags:
+                - tag: backup_group
+                  value: '{#BACKUP.GROUP}'
+                - tag: component
+                  value: backup-freshness
+                - tag: datastore
+                  value: '{#DATASTORE.NAME}'
+              trigger_prototypes:
+                - uuid: 9d4d36649a1e4728839bcdf313f77e6f
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}'
+                  name: 'PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than high threshold'
+                  priority: HIGH
+                  description: 'The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}] is older than {$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}. The client backup job has not produced a new snapshot for an extended period; check the client and its backup schedule.'
+                  dependencies:
+                    - name: 'PBS: API service not available'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
+                - uuid: ad372da28008485da184353c2922f644
+                  expression: 'last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}'
+                  name: 'PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than warning threshold'
+                  priority: WARNING
+                  description: 'The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}] is older than {$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}. A recent client backup run may have failed or been skipped.'
+                  dependencies:
+                    - name: 'PBS: API service not available'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
+                    - name: 'PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than high threshold'
+                      expression: 'last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}'
+          master_item:
+            key: pbs.snapshots
+          lld_macro_paths:
+            - lld_macro: '{#BACKUP.GROUP}'
+              path: $.group
+            - lld_macro: '{#BACKUP.ID}'
+              path: $.id
+            - lld_macro: '{#BACKUP.TYPE}'
+              path: $.type
+            - lld_macro: '{#DATASTORE.NAME}'
+              path: $.datastore
         - uuid: 5eec729d0e1c4e529cdc884a6c5887db
           name: 'PBS: Datastore discovery'
           type: DEPENDENT
@@ -711,6 +853,15 @@ zabbix_export:
         - macro: '{$PBS.PORT}'
           value: '8007'
           description: 'The API uses the HTTPS protocol and the server listens on port 8007 by default.'
+        - macro: '{$PBS.SNAPSHOT.AGE.HIGH}'
+          value: 50h
+          description: 'Last-snapshot age of a backup group above which a HIGH severity trigger fires. Default suits a daily backup schedule. Can be overridden per backup group using the {#BACKUP.GROUP} macro context.'
+        - macro: '{$PBS.SNAPSHOT.AGE.WARN}'
+          value: 30h
+          description: 'Last-snapshot age of a backup group above which a WARNING severity trigger fires. Default suits a daily backup schedule. Can be overridden per backup group using the {#BACKUP.GROUP} macro context.'
+        - macro: '{$PBS.SNAPSHOT.INTERVAL}'
+          value: 15m
+          description: 'Polling interval of the snapshot list item. Listing snapshots returns every snapshot of each datastore, so keep this interval moderate.'
         - macro: '{$PBS.TASKS.DAYS}'
           value: '2'
           description: 'Age of tasks to consider when looking for failed tasks (days).'

@@ -4,7 +4,7 @@
 
 Template for monitoring Proxmox Backup Server (PBS) over its REST API using the Zabbix HTTP agent.
 
-It collects the API service status, datastore usage (including a linear-regression estimate of when each datastore will be full), failed/erroneous tasks and the physical disk inventory with its SMART status.
+It collects the API service status, datastore usage (including a linear-regression estimate of when each datastore will be full), failed/erroneous tasks, per-backup-group snapshot freshness and the physical disk inventory with its SMART status.
 
 PBS uses an API, the documentation can be found here: https://pbs.proxmox.com/docs/api-viewer/index.html
 
@@ -50,6 +50,9 @@ Trusting the certificate at the server is the only option that also covers the A
 | {$PBS.TOKEN.SECRET}            | <p>Secret key of the API token. Typed as a secret macro — set it per host; the value is not stored in the template export.</p>             | _(secret, set per host)_               |
 | {$PBS.DATASTORE.AVAILABLE.MIN} | <p>Minimum available space in a datastore, in bytes (defaults to 10 GiB). Can be overridden per datastore using the `{#DATASTORE.NAME}` macro context.</p> | `10737418240`                          |
 | {$PBS.TASKS.DAYS}              | <p>Age of tasks to consider when looking for failed tasks (days).</p>                                                                                   | `2`                                    |
+| {$PBS.SNAPSHOT.AGE.WARN}       | <p>Last-snapshot age of a backup group above which a WARNING severity trigger fires. Default suits a daily backup schedule. Can be overridden per backup group using the `{#BACKUP.GROUP}` macro context.</p> | `30h`                                  |
+| {$PBS.SNAPSHOT.AGE.HIGH}       | <p>Last-snapshot age of a backup group above which a HIGH severity trigger fires. Default suits a daily backup schedule. Can be overridden per backup group using the `{#BACKUP.GROUP}` macro context.</p>    | `50h`                                  |
+| {$PBS.SNAPSHOT.INTERVAL}       | <p>Polling interval of the snapshot list item. Listing snapshots returns every snapshot of each datastore, so keep this interval moderate.</p>           | `15m`                                  |
 
 ### Items
 
@@ -59,6 +62,7 @@ Trusting the certificate at the server is the only option that also covers the A
 | PBS: Get datastore status | <p>Get datastore status.</p>      | HTTP agent | pbs.datastore.status<p>**Preprocessing**</p><ul><li><p>Check for not supported value</p><p>⛔️Custom on fail: Set value to: `Error getting data`</p></li><li><p>JSONPath: `$.body.data`</p></li></ul>                                                                |
 | PBS: Get disks            | <p>Get disks.</p>                 | HTTP agent | pbs.disks<p>**Preprocessing**</p><ul><li><p>Check for not supported value</p><p>⛔️Custom on fail: Set value to: `Error getting data`</p></li><li><p>JSONPath: `$.body.data`</p></li></ul>                                                                            |
 | PBS: Get failed tasks     | <p>Get erroneuous tasks.</p>      | HTTP agent | pbs.tasks.error<p>**Preprocessing**</p><ul><li><p>Check for not supported value</p><p>⛔️Custom on fail: Set value to: `Error getting data`</p></li><li><p>JSONPath: `$.body.data`</p></li><li><p>JavaScript: filters tasks newer than `{$PBS.TASKS.DAYS}` days</p></li></ul> |
+| PBS: Get snapshots        | <p>Latest snapshot time per backup group, across all datastores. The per-datastore snapshot lists are reduced to one entry per backup group, so only a small JSON document is stored per poll. Datastores that report an error or cannot be queried are skipped.</p> | Script | pbs.snapshots<p>Update interval: `{$PBS.SNAPSHOT.INTERVAL}`</p> |
 
 ### Triggers
 
@@ -66,6 +70,27 @@ Trusting the certificate at the server is the only option that also covers the A
 | ------------------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------- | -------------------------------- |
 | PBS: API service not available | <p>The API service is not available. Check the network connection, the PBS service status and the API token authorization settings.</p> | `last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200` | High     |                                  |
 | PBS: Failed tasks found        | <p>Erroneus tasks that occured within the last {$PBS.TASKS.DAYS} days have been found.</p> | `last(/Proxmox Backup Server by HTTP/pbs.tasks.error)<>"[]"`  | High     | <p>**Depends on:**</p><ul><li>PBS: API service not available</li></ul> |
+
+### LLD rule Backup group discovery
+
+| Name                       | Description                                                                                                                                                                                             | Type           | Key and additional info  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- | ------------------------ |
+| PBS: Backup group discovery | <p>Discovers the backup groups (`backup-type/backup-id`, e.g. `host/myclient`) that have at least one snapshot in any datastore.</p> | Dependent item | pbs.backupgroup.discovery |
+
+> **Caveat:** a client that has never produced a single snapshot is not discovered and therefore not monitored for freshness. This rule catches backups that *stopped*, not backups that were never set up.
+
+### Item prototypes for Backup group discovery
+
+| Name                                                                  | Description                                                                                                                                                                                                                                       | Type           | Key and additional info |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ----------------------- |
+| PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] Last Snapshot Age | <p>Seconds since the most recent snapshot of the backup group. For datastores filled by a sync job the snapshots keep the original backup-time of the source, so on the sync target this measures end-to-end freshness (client backup plus sync).</p> | Dependent item | pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}]<p>**Preprocessing**</p><ul><li><p>JSONPath: selects the group's latest backup-time</p><p>⛔️Custom on fail: Discard value</p></li><li><p>JavaScript: seconds since that time, clamped to `0`</p></li></ul> |
+
+### Trigger prototypes for Backup group discovery
+
+| Name                                                                                       | Description                                                                                                                                              | Expression                                                                                                                                      | Severity | Dependencies and additional info |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------- |
+| PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than high threshold    | <p>No new snapshot for an extended period; check the client and its backup schedule.</p>                                                                  | `last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}` | High     | <p>**Depends on:**</p><ul><li>PBS: API service not available</li></ul> |
+| PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than warning threshold | <p>A recent client backup run may have failed or been skipped.</p>                                                                                        | `last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}` | Warning  | <p>**Depends on:**</p><ul><li>PBS: API service not available</li><li>PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than high threshold</li></ul> |
 
 ### LLD rule Datastore discovery
 
