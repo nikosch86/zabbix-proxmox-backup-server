@@ -647,10 +647,13 @@ zabbix_export:
                 It's calculated via a simple Linear Regression (Least Squares) over the RRD data of the
                 last Month. Missing if not enough data points are available yet. An estimate in the past
                 means that usage is declining or not changing.
+                The value is discarded when PBS reports no estimate, for example when not
+                enough data points exist or for removable/offline datastores (PBS 4.x).
               preprocessing:
                 - type: JSONPATH
                   parameters:
                     - '$.[?(@.store == ''{#DATASTORE.NAME}'')].[''estimated-full-date''].first()'
+                  error_handler: DISCARD_VALUE
                 - type: JAVASCRIPT
                   parameters:
                     - |
@@ -679,10 +682,13 @@ zabbix_export:
                 It's calculated via a simple Linear Regression (Least Squares) over the RRD data of the
                 last Month. Missing if not enough data points are available yet. An estimate in the past
                 means that usage is declining or not changing.
+                The value is discarded when PBS reports no estimate, for example when not
+                enough data points exist or for removable/offline datastores (PBS 4.x).
               preprocessing:
                 - type: JSONPATH
                   parameters:
                     - '$.[?(@.store == ''{#DATASTORE.NAME}'')].[''estimated-full-date''].first()'
+                  error_handler: DISCARD_VALUE
                 - type: JAVASCRIPT
                   parameters:
                     - |
@@ -729,10 +735,13 @@ zabbix_export:
                 It's calculated via a simple Linear Regression (Least Squares) over the RRD data of the
                 last Month. Missing if not enough data points are available yet. An estimate in the past
                 means that usage is declining or not changing.
+                The value is discarded when PBS reports no estimate, for example when not
+                enough data points exist or for removable/offline datastores (PBS 4.x).
               preprocessing:
                 - type: JSONPATH
                   parameters:
                     - '$.[?(@.store == ''{#DATASTORE.NAME}'')].[''estimated-full-date''].first()'
+                  error_handler: DISCARD_VALUE
                 - type: JAVASCRIPT
                   parameters:
                     - |
