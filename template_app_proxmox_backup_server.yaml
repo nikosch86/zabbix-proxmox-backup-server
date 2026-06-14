@@ -164,7 +164,8 @@ zabbix_export:
                         group: group['backup-type'] + '/' + group['backup-id'],
                         type: group['backup-type'],
                         id: group['backup-id'],
-                        last: group['last-backup']
+                        last: group['last-backup'],
+                        comment: group.comment || ''
                     });
                 });
             });
@@ -172,10 +173,12 @@ zabbix_export:
           description: |
             Backup groups and their latest snapshot time (last-backup), across all
             datastores, from the per-datastore groups endpoint. One entry per backup
-            group is stored per poll. Datastores that report an error or cannot be
-            queried are skipped; their freshness items keep their last known value
-            until the datastore recovers (the datastore error trigger covers that
-            condition).
+            group is stored per poll, including the group comment so that freshness
+            alerting can be suppressed for intentionally-retained groups (for example
+            the leftover backups of a VM/CT that was deleted at the source). Datastores
+            that report an error or cannot be queried are skipped; their freshness
+            items keep their last known value until the datastore recovers (the
+            datastore error trigger covers that condition).
           timeout: 30s
           parameters:
             - name: host
@@ -539,7 +542,8 @@ zabbix_export:
                   expression: 'last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}'
                   name: 'PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than high threshold'
                   priority: HIGH
-                  description: 'The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}] is older than {$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}. The client backup job has not produced a new snapshot for an extended period; check the client and its backup schedule.'
+                  description: 'The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}] is older than {$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}. The client backup job has not produced a new snapshot for an extended period; check the client and its backup schedule. If the source VM/CT was deleted, add the {$PBS.SNAPSHOT.IGNORE.COMMENT} marker to the group comment in PBS to stop this alert (see the template description).'
+                  manual_close: 'YES'
                   dependencies:
                     - name: 'PBS: API service not available'
                       expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
@@ -547,7 +551,8 @@ zabbix_export:
                   expression: 'last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}'
                   name: 'PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than warning threshold'
                   priority: WARNING
-                  description: 'The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}] is older than {$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}. A recent client backup run may have failed or been skipped.'
+                  description: 'The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}] is older than {$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}. A recent client backup run may have failed or been skipped. If the source VM/CT was deleted, add the {$PBS.SNAPSHOT.IGNORE.COMMENT} marker to the group comment in PBS to stop this alert (see the template description).'
+                  manual_close: 'YES'
                   dependencies:
                     - name: 'PBS: API service not available'
                       expression: 'last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200'
@@ -556,6 +561,8 @@ zabbix_export:
           master_item:
             key: pbs.backupgroups
           lld_macro_paths:
+            - lld_macro: '{#BACKUP.COMMENT}'
+              path: $.comment
             - lld_macro: '{#BACKUP.GROUP}'
               path: $.group
             - lld_macro: '{#BACKUP.ID}'
@@ -564,6 +571,19 @@ zabbix_export:
               path: $.type
             - lld_macro: '{#DATASTORE.NAME}'
               path: $.datastore
+          overrides:
+            - name: 'No freshness triggers for comment-marked backup groups'
+              step: '1'
+              filter:
+                conditions:
+                  - macro: '{#BACKUP.COMMENT}'
+                    value: '{$PBS.SNAPSHOT.IGNORE.COMMENT}'
+                    operator: MATCHES_REGEX
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: LIKE
+                  value: 'last snapshot older than'
+                  discover: NO_DISCOVER
         - uuid: 5eec729d0e1c4e529cdc884a6c5887db
           name: 'PBS: Datastore discovery'
           type: DEPENDENT
@@ -1095,6 +1115,9 @@ zabbix_export:
         - macro: '{$PBS.SNAPSHOT.AGE.WARN}'
           value: 30h
           description: 'Last-snapshot age of a backup group above which a WARNING severity trigger fires. Default suits a daily backup schedule. Can be overridden per backup group using the {#BACKUP.GROUP} macro context.'
+        - macro: '{$PBS.SNAPSHOT.IGNORE.COMMENT}'
+          value: '(?i)no-monitor'
+          description: 'Regular expression matched against a backup group''s comment; a match suppresses that group''s snapshot-freshness triggers (the age item is kept, only the triggers are dropped). Use it for groups whose source VM/CT was deleted but whose backups are intentionally retained: set the group comment in PBS (Datastore > Content > group > Edit comment) to include the marker. Defaults to matching the text "no-monitor".'
         - macro: '{$PBS.SNAPSHOT.INTERVAL}'
           value: 15m
           description: 'Polling interval of the backup group list used for snapshot freshness. Listing groups scans every backup group of each datastore, so keep this interval moderate.'
