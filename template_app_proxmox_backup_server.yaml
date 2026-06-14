@@ -500,8 +500,9 @@ zabbix_export:
           name: 'PBS: Backup group discovery'
           type: DEPENDENT
           key: pbs.backupgroup.discovery
-          lifetime: 30d
-          enabled_lifetime_type: DISABLE_NEVER
+          lifetime: '{$PBS.LLD.KEEP.LOST}'
+          enabled_lifetime_type: DISABLE_AFTER
+          enabled_lifetime: '{$PBS.LLD.DISABLE.LOST}'
           description: |
             Discovers the backup groups (backup-type/backup-id, e.g. host/myclient)
             that have at least one snapshot in any datastore.
@@ -588,8 +589,9 @@ zabbix_export:
           name: 'PBS: Datastore discovery'
           type: DEPENDENT
           key: pbs.datastore.discovery
-          lifetime: 30d
-          enabled_lifetime_type: DISABLE_NEVER
+          lifetime: '{$PBS.LLD.KEEP.LOST}'
+          enabled_lifetime_type: DISABLE_AFTER
+          enabled_lifetime: '{$PBS.LLD.DISABLE.LOST}'
           description: 'Discovers the datastores configured on the Proxmox Backup Server from the datastore-usage endpoint.'
           item_prototypes:
             - uuid: 60f2c0498c414dfdab7e80cc7ea2985b
@@ -1106,6 +1108,12 @@ zabbix_export:
         - macro: '{$PBS.HOST}'
           value: '<SET PBS HOSTNAME>'
           description: 'Hostname or IP address of the PBS server API endpoint. Must be set on the host.'
+        - macro: '{$PBS.LLD.DISABLE.LOST}'
+          value: 1h
+          description: 'Grace period after which a discovered datastore or backup-group item is disabled once its datastore/group no longer exists in PBS, instead of polling the gone resource and erroring for the full keep period. Must exceed the discovery interval; the default is ~4 LLD poll cycles, which debounces a single incomplete API poll. Does not apply to disk discovery.'
+        - macro: '{$PBS.LLD.KEEP.LOST}'
+          value: 14d
+          description: 'Period after which a no-longer-present, already-disabled discovered datastore or backup-group item is deleted from the host. Must exceed {$PBS.LLD.DISABLE.LOST}. Does not apply to disk discovery.'
         - macro: '{$PBS.PORT}'
           value: '8007'
           description: 'The API uses the HTTPS protocol and the server listens on port 8007 by default.'
