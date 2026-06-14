@@ -542,7 +542,7 @@ zabbix_export:
                   expression: 'last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}'
                   name: 'PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than high threshold'
                   priority: HIGH
-                  description: 'The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}] is older than {$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}. The client backup job has not produced a new snapshot for an extended period; check the client and its backup schedule. If the source VM/CT was deleted, add the {$PBS.SNAPSHOT.IGNORE.COMMENT} marker to the group comment in PBS to stop this alert (see the template description).'
+                  description: 'The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}] is older than {$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}. The client backup job has not produced a new snapshot for an extended period; check the client and its backup schedule. If the source VM/CT was deleted, add the {$PBS.SNAPSHOT.IGNORE.COMMENT} marker to the group comment in PBS to stop monitoring its freshness; this already-open problem then clears only after the rule''s lost-resource period, so suppress it to silence sooner (see the template description).'
                   manual_close: 'YES'
                   dependencies:
                     - name: 'PBS: API service not available'
@@ -551,7 +551,7 @@ zabbix_export:
                   expression: 'last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}'
                   name: 'PBS: Backup group [{#DATASTORE.NAME}/{#BACKUP.GROUP}] last snapshot older than warning threshold'
                   priority: WARNING
-                  description: 'The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}] is older than {$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}. A recent client backup run may have failed or been skipped. If the source VM/CT was deleted, add the {$PBS.SNAPSHOT.IGNORE.COMMENT} marker to the group comment in PBS to stop this alert (see the template description).'
+                  description: 'The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}] is older than {$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}. A recent client backup run may have failed or been skipped. If the source VM/CT was deleted, add the {$PBS.SNAPSHOT.IGNORE.COMMENT} marker to the group comment in PBS to stop monitoring its freshness; this already-open problem then clears only after the rule''s lost-resource period, so suppress it to silence sooner (see the template description).'
                   manual_close: 'YES'
                   dependencies:
                     - name: 'PBS: API service not available'
